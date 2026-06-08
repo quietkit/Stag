@@ -5,8 +5,10 @@ import ScreenCaptureKit
 final class SelectionOverlayWindow: NSWindow {
     var onCapture: ((CGImage) -> Void)?
     var onCancel: (() -> Void)?
+    private let frozenImage: CGImage?
 
-    init() {
+    init(frozenImage: CGImage? = nil, dimOverlay: Bool = true) {
+        self.frozenImage = frozenImage
         let screens = NSScreen.screens
         let totalFrame = screens.reduce(NSZeroRect) { $0.union($1.frame) }
         super.init(
@@ -26,13 +28,15 @@ final class SelectionOverlayWindow: NSWindow {
 
         let overlayView = SelectionOverlayView(
             screenFrame: totalFrame,
+            frozenImage: frozenImage,
             onCapture: { [weak self] rect in
                 Task { await self?.performCapture(rect) }
             },
             onCancel: { [weak self] in
                 self?.onCancel?()
                 self?.close()
-            }
+            },
+            dimOverlay: dimOverlay
         )
         let hosting = NSHostingView(rootView: overlayView)
         hosting.frame = NSRect(origin: .zero, size: totalFrame.size)
@@ -49,7 +53,6 @@ final class SelectionOverlayWindow: NSWindow {
         guard let contentView = self.contentView else { return }
         let cvHeight = contentView.frame.height
 
-        // Close overlay immediately so it's not captured in the screenshot
         close()
 
         let cgX = viewRect.minX + frame.origin.x
@@ -63,15 +66,25 @@ final class SelectionOverlayWindow: NSWindow {
         )}) else { return }
 
         let displayFrame = screen.frame
-        let scale = screen.backingScaleFactor
         let cgMaxY = cgMinY + viewRect.height
 
-        let imageCropRect = CGRect(
-            x: (cgX - displayFrame.origin.x) * scale,
-            y: (displayFrame.origin.y + displayFrame.height - cgMaxY) * scale,
-            width: viewRect.width * scale,
-            height: viewRect.height * scale
-        )
+        if let frozen = frozenImage {
+            // frozenImage covers the entire totalFrame — derive scale from its actual pixel dimensions
+            let screens = NSScreen.screens
+            let totalFrame = screens.reduce(NSZeroRect) { $0.union($1.frame) }
+            guard totalFrame.width > 0, totalFrame.height > 0 else { return }
+            let frozenScaleX = CGFloat(frozen.width) / totalFrame.width
+            let frozenScaleY = CGFloat(frozen.height) / totalFrame.height
+            let frozenCropRect = CGRect(
+                x: (cgX - totalFrame.origin.x) * frozenScaleX,
+                y: (totalFrame.origin.y + totalFrame.height - cgMaxY) * frozenScaleY,
+                width: viewRect.width * frozenScaleX,
+                height: viewRect.height * frozenScaleY
+            )
+            guard let cropped = frozen.cropping(to: frozenCropRect) else { return }
+            onCapture?(cropped)
+            return
+        }
 
         do {
             let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 ?? CGMainDisplayID()
@@ -87,7 +100,16 @@ final class SelectionOverlayWindow: NSWindow {
             let ourWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == ourBundleID }
             let filter = SCContentFilter(display: scDisplay, excludingWindows: ourWindows)
             let fullImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-            guard let cropped = fullImage.cropping(to: imageCropRect) else { return }
+            // Derive actual pixel scale from the returned image (avoids HiDPI assumption errors)
+            let actualScaleX = CGFloat(fullImage.width) / displayFrame.width
+            let actualScaleY = CGFloat(fullImage.height) / displayFrame.height
+            let actualCropRect = CGRect(
+                x: (cgX - displayFrame.origin.x) * actualScaleX,
+                y: (displayFrame.origin.y + displayFrame.height - cgMaxY) * actualScaleY,
+                width: viewRect.width * actualScaleX,
+                height: viewRect.height * actualScaleY
+            )
+            guard let cropped = fullImage.cropping(to: actualCropRect) else { return }
             onCapture?(cropped)
         } catch {}
     }
@@ -96,4 +118,7 @@ final class SelectionOverlayWindow: NSWindow {
         onCancel?()
         close()
     }
+
+    override var canBecomeKey: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
 }

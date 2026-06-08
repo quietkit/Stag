@@ -47,10 +47,12 @@ final class RecordingRectOverlay: NSWindow {
         view.autoresizingMask = [.width, .height]
         view.onRectSelected = { [weak self] rect in
             guard let self = self else { return }
+            // rect is in view coords (flipped: y=0 at top, y increases downward).
+            // Convert to absolute screen coords (Cocoa: y=0 at bottom).
             let cvHeight = self.contentView?.frame.height ?? totalFrame.height
             let screenRect = NSRect(
                 x: rect.minX + self.frame.origin.x,
-                y: self.frame.origin.y + cvHeight - rect.maxY,
+                y: self.frame.origin.y + cvHeight - rect.maxY,   // flip y → Cocoa screen coords
                 width: rect.width,
                 height: rect.height
             )
@@ -91,18 +93,18 @@ final class RecordingRectView: NSView {
     override var isFlipped: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        dragStart = event.locationInWindow
+        dragStart = convert(event.locationInWindow, from: nil)
         isDragging = true
     }
 
     override func mouseDragged(with event: NSEvent) {
-        dragCurrent = event.locationInWindow
+        dragCurrent = convert(event.locationInWindow, from: nil)
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
         guard isDragging, let start = dragStart else { return }
-        let end = event.locationInWindow
+        let end = convert(event.locationInWindow, from: nil)
         let rect = CGRect(
             x: min(start.x, end.x), y: min(start.y, end.y),
             width: abs(end.x - start.x), height: abs(end.y - start.y)

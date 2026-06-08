@@ -38,8 +38,23 @@ final class MediaCaptureSource: CaptureSource {
         }
         let filter = SCContentFilter(display: scDisplay, excludingWindows: [])
 
+        // Compute display-relative captureRect (y=0 at top-left of display, in logical points).
+        // selectionRect is in absolute Cocoa screen coords (y=0 at bottom).
+        let nsScreen = NSScreen.screens.first { screen in
+            (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32) == display
+        }
+        let captureRect: CGRect? = nsScreen.map { screen in
+            let df = screen.frame
+            return CGRect(
+                x: selectionRect.origin.x - df.origin.x,
+                y: df.maxY - selectionRect.maxY,         // flip to top-left origin
+                width: selectionRect.width,
+                height: selectionRect.height
+            )
+        }
+
         let targetSize = CGSize(width: selectionRect.width, height: selectionRect.height)
-        let config = RecordingConfig.from(preferences: store.preferences, targetSize: targetSize)
+        let config = RecordingConfig.from(preferences: store.preferences, targetSize: targetSize, captureRect: captureRect)
 
         let saveDir = URL(fileURLWithPath: store.preferences.expandedSavePath)
         try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)

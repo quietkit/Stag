@@ -21,4 +21,9 @@ final class EditorWindow: NSWindow {
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    // ESC closes the editor without saving
+    override func cancelOperation(_ sender: Any?) {
+        performClose(sender)
+    }
 }

@@ -42,6 +42,9 @@ final class GIFRecorder: NSObject, CaptureRecorder, ObservableObject, @unchecked
         streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
         streamConfig.showsCursor = config.showCursor
         streamConfig.queueDepth = 3
+        if #available(macOS 13.0, *), let rect = config.captureRect {
+            streamConfig.sourceRect = rect
+        }
 
         stream = SCStream(filter: filter, configuration: streamConfig, delegate: self)
         try stream?.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)

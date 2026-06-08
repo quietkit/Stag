@@ -7,7 +7,7 @@ struct ThumbnailEntry {
     let date: Date
 }
 
-final class FloatingThumbnailWindow: NSWindow {
+final class FloatingThumbnailWindow: NSWindow, NSWindowDelegate {
     var onSave: ((NSImage) -> Void)?
     var onEdit: ((NSImage) -> Void)?
     var onDiscard: ((NSImage) -> Void)?
@@ -15,6 +15,7 @@ final class FloatingThumbnailWindow: NSWindow {
     var onReveal: ((NSImage) -> Void)?
     var onPin: ((NSImage) -> Void)?
     var onAutoSave: ((NSImage) -> Void)?
+    var onRetake: (() -> Void)?
 
     private var entries: [ThumbnailEntry] = []
     private var currentIndex = 0
@@ -124,7 +125,9 @@ final class FloatingThumbnailWindow: NSWindow {
         autoDismissWork?.cancel()
         switch action {
         case .save:   onSave?(image)
-        case .edit:   onEdit?(image)
+        case .edit:
+            onEdit?(image)
+            fadeOutAndClose()   // dismiss thumbnail when editor opens
         case .discard:
             entries.remove(at: currentIndex)
             if entries.isEmpty { close(); return }
@@ -135,6 +138,9 @@ final class FloatingThumbnailWindow: NSWindow {
         case .copy:   onCopy?(image)
         case .reveal: onReveal?(image)
         case .pin:    onPin?(image)
+        case .retake:
+            close()
+            onRetake?()
         }
     }
 
@@ -174,12 +180,12 @@ final class FloatingThumbnailWindow: NSWindow {
     deinit {
         autoDismissWork?.cancel()
     }
-}
 
-// MARK: - NSWindowDelegate
-
-extension FloatingThumbnailWindow: NSWindowDelegate {
-    func windowDidResignKey(_ notification: Notification) {
-        // Optionally fade out when losing focus — but we keep it visible like CleanShot
+    // ESC dismisses the thumbnail
+    override func cancelOperation(_ sender: Any?) {
+        autoDismissWork?.cancel()
+        fadeOutAndClose()
     }
+
+    override var canBecomeKey: Bool { true }
 }

@@ -6,7 +6,18 @@ final class FullscreenCaptureSource: CaptureSource {
 
     func beginCapture(store: AppStore) async throws -> CaptureOutput {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first else {
+
+        // Prefer the display containing the mouse cursor (most-recently-used screen).
+        let mouseScreen = NSScreen.screens.first(where: {
+            $0.frame.contains(NSEvent.mouseLocation)
+        }) ?? NSScreen.main ?? NSScreen.screens.first
+
+        let targetDisplayID = mouseScreen?
+            .deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
+            ?? CGMainDisplayID()
+
+        guard let display = content.displays.first(where: { $0.displayID == targetDisplayID })
+                          ?? content.displays.first else {
             throw CaptureError.captureFailed(reason: "No display found")
         }
 

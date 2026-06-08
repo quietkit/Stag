@@ -5,6 +5,7 @@ final class CaptureManager {
     private let store: AppStore
     private var currentSource: CaptureSource?
     private var thumbnailWindow: FloatingThumbnailWindow?
+    private var lastCaptureType: CaptureType = .area
 
     init(store: AppStore) {
         self.store = store
@@ -14,6 +15,7 @@ final class CaptureManager {
 
     @MainActor
     func startCapture(type: CaptureType = .area) {
+        lastCaptureType = type
         guard currentSource == nil else { return }
 
         store.captureState = .selecting
@@ -23,8 +25,24 @@ final class CaptureManager {
         Task { [weak self] in
             guard let self = self else { return }
 
+            let shouldHideDesktop = self.store.preferences.hideDesktopIcons && type.isScreenCapture
+            if shouldHideDesktop {
+                await MainActor.run { DesktopIconsManager.shared.hide() }
+            }
+
+            if shouldHideDesktop {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+
+            // Auto-enable DND before recording
+            if type.isScreenCapture == false && self.store.preferences.autoDND {
+                await MainActor.run { DNDManager.shared.enable() }
+            }
+
             guard await AppStore.requestPermissionAndCheck() else {
                 await MainActor.run {
+                    DesktopIconsManager.shared.restore()
+                    DNDManager.shared.restore()
                     self.store.didFail(with: .screenRecordingPermissionDenied)
                     self.currentSource = nil
                 }
@@ -32,7 +50,6 @@ final class CaptureManager {
             }
 
             do {
-                // Self-timer countdown
                 let delay = self.store.preferences.captureDelay
                 if delay > 0 {
                     await MainActor.run {
@@ -42,34 +59,47 @@ final class CaptureManager {
                     let completed = await overlay.start()
                     await MainActor.run { overlay.close() }
                     guard completed else {
-                        self.currentSource = nil
-                        self.store.resetState()
+                        await MainActor.run {
+                            DesktopIconsManager.shared.restore()
+                            DNDManager.shared.restore()
+                            self.currentSource = nil
+                            self.store.resetState()
+                        }
                         return
                     }
                 }
 
                 let output = try await source.beginCapture(store: self.store)
                 await MainActor.run {
+                    DesktopIconsManager.shared.restore()
+                    DNDManager.shared.restore()
                     switch output {
                     case .image(let cgImage):
                         self.handleCapturedImage(cgImage, type: type)
                     case .video(let url):
-                        self.handleCapturedVideo(url)
+                        self.handleCapturedVideo(url, type: type)
                     }
+                    self.currentSource = nil
                 }
             } catch {
-                if let captureError = error as? CaptureError {
-                    self.store.didFail(with: captureError)
-                } else {
-                    self.store.didFail(with: .captureFailed(reason: error.localizedDescription))
+                await MainActor.run {
+                    DesktopIconsManager.shared.restore()
+                    DNDManager.shared.restore()
+                    self.currentSource = nil
+                    if let captureError = error as? CaptureError {
+                        self.store.didFail(with: captureError)
+                    } else {
+                        self.store.didFail(with: .captureFailed(reason: error.localizedDescription))
+                    }
                 }
             }
-            self.currentSource = nil
         }
     }
 
     func cancelCapture() {
         currentSource = nil
+        DesktopIconsManager.shared.restore()
+        DNDManager.shared.restore()
         store.resetState()
     }
 
@@ -85,7 +115,7 @@ final class CaptureManager {
         case .fullscreen:
             return FullscreenCaptureSource()
         case .scrolling:
-            return AreaCaptureSource()
+            return ScrollingCaptureSource()
         case .recording:
             return MediaCaptureSource(
                 type: .recording,
@@ -126,34 +156,52 @@ final class CaptureManager {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([nsImage])
         }
-        if prefs.automaticSave {
-            saveImage(nsImage, type: type, addToHistory: true)
-        }
         switch prefs.afterCaptureAction {
         case .showOverlay, .ask:
-            showThumbnail(nsImage)
+            if prefs.automaticSave { saveImage(nsImage, type: type, addToHistory: true) }
+            if prefs.showFloatingThumbnail {
+                showThumbnail(nsImage, captureType: type)
+            }
         case .save:
+            // Single save — automaticSave is redundant here
             saveImage(nsImage, type: type, addToHistory: true)
         case .copy:
+            if prefs.automaticSave { saveImage(nsImage, type: type, addToHistory: true) }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([nsImage])
         case .openEditor:
+            if prefs.automaticSave { saveImage(nsImage, type: type, addToHistory: true) }
             openEditor(with: nsImage)
         }
     }
 
     // MARK: - Video Pipeline
 
-    private func handleCapturedVideo(_ url: URL) {
+    private func handleCapturedVideo(_ url: URL, type: CaptureType) {
         store.captureState = .completed
-        // For now: copy path to clipboard
+
+        // Show trimmer for screen recordings (not GIFs)
+        if type == .recording {
+            showVideoTrimmer(url)
+            return
+        }
+
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
     }
 
+    private func showVideoTrimmer(_ url: URL) {
+        let trimmer = VideoTrimmerWindow(videoURL: url) { outputURL in
+            let finalURL = outputURL ?? url
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(finalURL.lastPathComponent, forType: .string)
+        }
+        trimmer.show()
+    }
+
     // MARK: - Thumbnail
 
-    private func showThumbnail(_ image: NSImage) {
+    private func showThumbnail(_ image: NSImage, captureType: CaptureType) {
         let prefs = store.preferences
 
         let thumbnail: FloatingThumbnailWindow
@@ -164,9 +212,8 @@ final class CaptureManager {
             self.thumbnailWindow = thumbnail
         }
 
-        // Always set callbacks (in case window was reused from a prior session)
         thumbnail.onSave = { [weak self] img in
-            self?.saveImage(img, type: .area, addToHistory: true)
+            self?.saveImage(img, type: captureType, addToHistory: true)
         }
         thumbnail.onEdit = { [weak self] img in
             self?.openEditor(with: img)
@@ -180,7 +227,7 @@ final class CaptureManager {
         }
         thumbnail.onReveal = { [weak self] img in
             guard let self = self else { return }
-            self.saveImage(img, type: .area, addToHistory: false)
+            self.saveImage(img, type: captureType, addToHistory: false)
             if let url = self.lastSavedURL {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
@@ -189,7 +236,11 @@ final class CaptureManager {
             PinboardManager.shared.pin(image: img)
         }
         thumbnail.onAutoSave = { [weak self] img in
-            self?.saveImage(img, type: .area, addToHistory: true)
+            self?.saveImage(img, type: captureType, addToHistory: true)
+        }
+        thumbnail.onRetake = { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in self.startCapture(type: self.lastCaptureType) }
         }
 
         thumbnail.pushEntry(image: image)
@@ -233,7 +284,11 @@ final class CaptureManager {
     }
 
     private func saveJPEGThumbnail(_ image: NSImage, to url: URL) {
-        let thumbSize = CGSize(width: 320, height: 240)
+        let maxDim: CGFloat = 320
+        let w = image.size.width, h = image.size.height
+        guard w > 0, h > 0 else { return }
+        let scale = min(maxDim / w, maxDim / h, 1.0)
+        let thumbSize = CGSize(width: w * scale, height: h * scale)
         let thumb = NSImage(size: thumbSize)
         thumb.lockFocus()
         image.draw(in: NSRect(origin: .zero, size: thumbSize),

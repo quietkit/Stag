@@ -2,8 +2,10 @@ import SwiftUI
 
 struct SelectionOverlayView: View {
     let screenFrame: NSRect
+    let frozenImage: CGImage?
     let onCapture: (CGRect) -> Void
     let onCancel: () -> Void
+    var dimOverlay: Bool = true   // false = Shottr "no-overlay" mode (transparent background)
 
     @State private var dragStart: CGPoint?
     @State private var dragCurrent: CGPoint?
@@ -35,16 +37,28 @@ struct SelectionOverlayView: View {
 
     @ViewBuilder
     private var dimmingOverlay: some View {
-        if let rect = selectionRect, isDragging {
-            Path { path in
-                path.addRect(CGRect(origin: .zero, size: CGSize(width: screenFrame.width, height: screenFrame.height)))
-                path.addRect(rect)
+        if let img = frozenImage {
+            Image(img, scale: 1, label: Text(""))
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: screenFrame.width, height: screenFrame.height)
+            if dimOverlay, let _ = selectionRect, isDragging {
+                Color.black.opacity(0.35)
+                    .allowsHitTesting(false)
             }
-            .fill(Color.black.opacity(0.35), style: FillStyle(eoFill: true))
-        } else {
-            Color.black.opacity(0.3)
-                .onTapGesture { }
+        } else if dimOverlay {
+            if let rect = selectionRect, isDragging {
+                Path { path in
+                    path.addRect(CGRect(origin: .zero, size: CGSize(width: screenFrame.width, height: screenFrame.height)))
+                    path.addRect(rect)
+                }
+                .fill(Color.black.opacity(0.35), style: FillStyle(eoFill: true))
+            } else {
+                Color.black.opacity(0.3)
+                    .onTapGesture { }
+            }
         }
+        // dimOverlay = false: no background dim at all — cursor is the only indicator
     }
 
     @ViewBuilder

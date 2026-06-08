@@ -5,6 +5,13 @@ import Combine
 
 enum CaptureType: String, Codable, CaseIterable {
     case area, window, fullscreen, scrolling, recording, gif
+
+    var isScreenCapture: Bool {
+        switch self {
+        case .area, .window, .fullscreen, .scrolling: return true
+        case .recording, .gif: return false
+        }
+    }
 }
 
 struct CaptureRecord: Codable, Identifiable, Equatable {
@@ -45,8 +52,16 @@ final class CaptureHistoryStore: ObservableObject {
 
     var filteredRecords: [CaptureRecord] {
         guard !searchQuery.isEmpty else { return records }
+        let q = searchQuery.lowercased()
         return records.filter { record in
-            record.ocrText?.localizedCaseInsensitiveContains(searchQuery) == true
+            if record.ocrText?.localizedCaseInsensitiveContains(q) == true { return true }
+            let filename = (record.filePath as NSString).lastPathComponent.lowercased()
+            if filename.contains(q) { return true }
+            let fmt = DateFormatter()
+            fmt.dateStyle = .medium
+            fmt.timeStyle = .short
+            if fmt.string(from: record.date).lowercased().contains(q) { return true }
+            return false
         }
     }
 
@@ -92,9 +107,15 @@ final class CaptureHistoryStore: ObservableObject {
 
     // MARK: - Persistence
 
+    private static let saveQueue = DispatchQueue(label: "com.ganwar.Cropit.historySave", qos: .utility)
+
     private func save() {
-        guard let data = try? JSONEncoder().encode(records) else { return }
-        try? data.write(to: storageURL, options: .atomic)
+        let snapshot = records
+        let url = storageURL
+        Self.saveQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            try? data.write(to: url, options: .atomic)
+        }
     }
 
     private func load() {

@@ -56,7 +56,7 @@ final class CaptureHUDWindow: NSWindow {
         level = .floating
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        ignoresMouseEvents = true
+        ignoresMouseEvents = false   // must be false so the Stop button is clickable
 
         hostingView.frame = NSRect(origin: .zero, size: size)
         hostingView.autoresizingMask = [.width, .height]

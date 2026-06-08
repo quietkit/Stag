@@ -1,11 +1,11 @@
 import SwiftUI
 
 enum DrawingTool: String, CaseIterable {
-    case arrow, rect, circle, text, blur, highlight, freehand, stepNumber, mosaic, emoji, ruler, spotlight
+    case arrow, curvedArrow, line, rect, circle, text, blur, highlight, smartHighlight, freehand, stepNumber, mosaic, emoji, ruler, spotlight, magnifierCallout, eraser, eyedropper, crop
 }
 
 struct Annotation: Identifiable {
-    let id = UUID()
+    var id = UUID()
     var type: AnnotationType
     var color: Color
     var fillColor: Color?
@@ -16,6 +16,12 @@ struct Annotation: Identifiable {
         switch type {
         case .arrow(let start, let end):
             return distancePointToSegment(point, start, end) < hitInset + lineWidth
+        case .line(let start, let end):
+            return distancePointToSegment(point, start, end) < hitInset + lineWidth
+        case .curvedArrow(let start, let control, let end):
+            if distancePointToSegment(point, start, control) < hitInset + lineWidth { return true }
+            if distancePointToSegment(point, control, end) < hitInset + lineWidth { return true }
+            return false
         case .rect(let origin, let size):
             return CGRect(origin: origin, size: size).standardized.expand(hitInset).contains(point)
         case .circle(let origin, let size):
@@ -26,6 +32,8 @@ struct Annotation: Identifiable {
         case .blur(let origin, let size):
             return CGRect(origin: origin, size: size).standardized.expand(hitInset).contains(point)
         case .highlight(let origin, let size):
+            return CGRect(origin: origin, size: size).standardized.expand(hitInset).contains(point)
+        case .smartHighlight(let origin, let size):
             return CGRect(origin: origin, size: size).standardized.expand(hitInset).contains(point)
         case .freehand(let points):
             for p in points {
@@ -43,6 +51,15 @@ struct Annotation: Identifiable {
             return distancePointToSegment(point, start, end) < hitInset + lineWidth
         case .spotlight(let origin, let size):
             return CGRect(origin: origin, size: size).standardized.expand(hitInset).contains(point)
+        case .magnifierCallout(let center, let calloutPoint, let radius, _):
+            let magRect = CGRect(origin: CGPoint(x: center.x - radius, y: center.y - radius), size: CGSize(width: radius * 2, height: radius * 2))
+            if magRect.expand(hitInset).contains(point) { return true }
+            if distancePointToSegment(point, center, calloutPoint) < hitInset + lineWidth { return true }
+            let bubbleSize = CGSize(width: 120, height: 60)
+            let bubbleOrigin = CGPoint(x: calloutPoint.x - bubbleSize.width / 2, y: calloutPoint.y - bubbleSize.height / 2)
+            if CGRect(origin: bubbleOrigin, size: bubbleSize).expand(hitInset).contains(point) { return true }
+            return false
+        case .freehandErase: return false
         }
     }
 
@@ -51,6 +68,10 @@ struct Annotation: Identifiable {
         switch copy.type {
         case .arrow(let start, let end):
             copy.type = .arrow(start: start + delta, end: end + delta)
+        case .line(let start, let end):
+            copy.type = .line(start: start + delta, end: end + delta)
+        case .curvedArrow(let start, let control, let end):
+            copy.type = .curvedArrow(start: start + delta, control: control + delta, end: end + delta)
         case .rect(let origin, let size):
             copy.type = .rect(origin: origin + delta, size: size)
         case .circle(let origin, let size):
@@ -61,6 +82,8 @@ struct Annotation: Identifiable {
             copy.type = .blur(origin: origin + delta, size: size)
         case .highlight(let origin, let size):
             copy.type = .highlight(origin: origin + delta, size: size)
+        case .smartHighlight(let origin, let size):
+            copy.type = .smartHighlight(origin: origin + delta, size: size)
         case .freehand(let points):
             copy.type = .freehand(points: points.map { $0 + delta })
         case .stepNumber(let center, let number):
@@ -73,6 +96,9 @@ struct Annotation: Identifiable {
             copy.type = .ruler(start: start + delta, end: end + delta)
         case .spotlight(let origin, let size):
             copy.type = .spotlight(origin: origin + delta, size: size)
+        case .magnifierCallout(let center, let calloutPoint, let radius, let scale):
+            copy.type = .magnifierCallout(center: center + delta, calloutPoint: calloutPoint + delta, radius: radius, scale: scale)
+        case .freehandErase: break
         }
         return copy
     }
@@ -80,17 +106,22 @@ struct Annotation: Identifiable {
 
 enum AnnotationType {
     case arrow(start: CGPoint, end: CGPoint)
+    case curvedArrow(start: CGPoint, control: CGPoint, end: CGPoint)
+    case line(start: CGPoint, end: CGPoint)
     case rect(origin: CGPoint, size: CGSize)
     case circle(origin: CGPoint, size: CGSize)
     case text(position: CGPoint, text: String, fontSize: CGFloat)
     case blur(origin: CGPoint, size: CGSize)
     case highlight(origin: CGPoint, size: CGSize)
+    case smartHighlight(origin: CGPoint, size: CGSize)
     case freehand(points: [CGPoint])
     case stepNumber(center: CGPoint, number: Int)
     case mosaic(origin: CGPoint, size: CGSize)
     case emoji(position: CGPoint, text: String, fontSize: CGFloat)
     case ruler(start: CGPoint, end: CGPoint)
     case spotlight(origin: CGPoint, size: CGSize)
+    case magnifierCallout(center: CGPoint, calloutPoint: CGPoint, radius: CGFloat, scale: CGFloat)
+    case freehandErase
 }
 
 struct CanvasState: Equatable {
@@ -105,7 +136,7 @@ struct CanvasState: Equatable {
 }
 
 let editorColors: [Color] = [
-    .white, .red, .orange, .yellow, .green, .blue, .purple, .black
+    .red, .orange, .yellow, .green, .blue, .purple, .black, .white
 ]
 
 let commonEmojis: [String] = [

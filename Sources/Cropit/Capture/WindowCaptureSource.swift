@@ -42,6 +42,7 @@ final class WindowCaptureSource: CaptureSource {
             let filter = SCContentFilter(desktopIndependentWindow: scWindow)
             let config = SCStreamConfiguration()
             config.showsCursor = false
+            config.shouldBeOpaque = !AppStore.shared.preferences.windowCaptureShadow
             return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
         } catch {
             return nil
