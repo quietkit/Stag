@@ -43,6 +43,7 @@ struct EditorView: View {
     @State private var textInput = ""
     @State private var stepCounter = 1
     @State private var textFontSize: CGFloat = 24
+    @State private var textStyle: TextStyle = .regular
     @State private var blurRadius: CGFloat = 12
 
     // Emoji
@@ -472,9 +473,13 @@ struct EditorView: View {
                 ctx.fill(Path(ellipseIn: vr), with: .color(fc))
             }
             ctx.stroke(Path(ellipseIn: vr), with: .color(annotation.color), lineWidth: annotation.lineWidth)
-        case .text(let pos, let text, let fontSize):
+        case .text(let pos, let text, let fontSize, let style):
             let p = cgApply(pos, scale: scale, offset: offset)
-            ctx.draw(Text(text).font(.system(size: fontSize * scale)).foregroundColor(annotation.color), at: p, anchor: .topLeading)
+            var font: Font = .system(size: fontSize * scale)
+            if style == .bold || style == .boldItalic {
+                font = .system(size: fontSize * scale, weight: .semibold)
+            }
+            ctx.draw(Text(text).font(font).foregroundColor(annotation.color), at: p, anchor: .topLeading)
         case .blur(let origin, let size):
             let r = CGRect(origin: origin, size: size).standardized
             let vr = applyRect(r, scale: scale, offset: offset)
@@ -1054,7 +1059,7 @@ struct EditorView: View {
     private func addTextAnnotation() {
         guard !textInput.isEmpty else { return }
         pushUndo()
-        annotations.append(Annotation(type: .text(position: pendingTextPosition, text: textInput, fontSize: textFontSize), color: currentColor, fillColor: nil, lineWidth: currentLineWidth))
+        annotations.append(Annotation(type: .text(position: pendingTextPosition, text: textInput, fontSize: textFontSize, style: textStyle), color: currentColor, fillColor: nil, lineWidth: currentLineWidth))
         textInput = ""
     }
 
@@ -1158,7 +1163,7 @@ struct EditorView: View {
         HStack(spacing: 8) {
             switch currentTool {
             case .text:
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Text("Font:")
                         .font(.system(size: 9))
                         .foregroundColor(.secondary)
@@ -1170,6 +1175,42 @@ struct EditorView: View {
                     .pickerStyle(.menu)
                     .frame(width: 50)
                     .controlSize(.small)
+
+                    Divider()
+                        .frame(height: 16)
+
+                    // Bold button
+                    Button {
+                        textStyle = [.bold, .boldItalic].contains(textStyle) ?
+                            ([.italic, .boldItalic].contains(textStyle) ? .italic : .regular) :
+                            ([.italic, .boldItalic].contains(textStyle) ? .boldItalic : .bold)
+                    } label: {
+                        Text("B")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(width: 18, height: 18)
+                            .background([.bold, .boldItalic].contains(textStyle) ? Color.accentColor : Color.secondary.opacity(0.1))
+                            .foregroundColor([.bold, .boldItalic].contains(textStyle) ? .white : .secondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Bold")
+
+                    // Italic button
+                    Button {
+                        textStyle = [.italic, .boldItalic].contains(textStyle) ?
+                            ([.bold, .boldItalic].contains(textStyle) ? .bold : .regular) :
+                            ([.bold, .boldItalic].contains(textStyle) ? .boldItalic : .italic)
+                    } label: {
+                        Text("I")
+                            .font(.system(size: 10, weight: .regular))
+                            .italic()
+                            .frame(width: 18, height: 18)
+                            .background([.italic, .boldItalic].contains(textStyle) ? Color.accentColor : Color.secondary.opacity(0.1))
+                            .foregroundColor([.italic, .boldItalic].contains(textStyle) ? .white : .secondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Italic")
                 }
             case .blur:
                 HStack(spacing: 4) {
@@ -1635,9 +1676,14 @@ struct EditorView: View {
                     ctx.fillEllipse(in: ce)
                 }
                 ctx.strokeEllipse(in: ce)
-            case .text(let pos, let text, let fontSize):
+            case .text(let pos, let text, let fontSize, let style):
+                var fontSize_ = fontSize
+                var font = NSFont.systemFont(ofSize: fontSize_)
+                if style == .bold || style == .boldItalic {
+                    font = NSFont.boldSystemFont(ofSize: fontSize_)
+                }
                 let attrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: fontSize),
+                    .font: font,
                     .foregroundColor: NSColor(annotation.color)
                 ]
                 text.draw(at: pos, withAttributes: attrs)

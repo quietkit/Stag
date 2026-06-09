@@ -10,6 +10,8 @@ final class MediaCaptureSource: CaptureSource {
     private let fileExtension: String
     private var stopRequested = false
     private var stopContinuation: CheckedContinuation<Void, Never>?
+    var onRecordingStarted: (() -> Void)?
+    var onRecordingStopped: (() -> Void)?
 
     init(
         type: CaptureType,
@@ -27,6 +29,15 @@ final class MediaCaptureSource: CaptureSource {
 
     nonisolated func beginCapture(store: AppStore) async throws -> CaptureOutput {
         try await _beginCapture(store: store)
+    }
+
+    func requestStop() {
+        stopRequested = true
+        Task { @MainActor in
+            _ = await recorder.stopCapture()
+            self.stopContinuation?.resume()
+            self.stopContinuation = nil
+        }
     }
 
     private func _beginCapture(store: AppStore) async throws -> CaptureOutput {
@@ -86,11 +97,13 @@ final class MediaCaptureSource: CaptureSource {
 
         store.captureState = .capturing
         hud.show()
+        onRecordingStarted?()
 
         do {
             try await recorder.startCapture(filter: filter, config: config, outputURL: outputURL)
         } catch {
             hud.close()
+            onRecordingStopped?()
             throw error
         }
 
@@ -105,6 +118,7 @@ final class MediaCaptureSource: CaptureSource {
 
         // hud may already be closed by onStop; guard against double-close
         if hud.isVisible { hud.close() }
+        onRecordingStopped?()
         store.captureState = .completed
         return .video(outputURL)
     }

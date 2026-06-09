@@ -136,8 +136,8 @@ final class Preferences: ObservableObject {
     @Published var windowCaptureShadow: Bool = true
     /// When false: no floating thumbnail after capture — image goes directly to editor / clipboard
     @Published var showFloatingThumbnail: Bool = false
-    /// When false: the selection overlay has no dark dimming — only a crosshair cursor, Shottr-style
-    @Published var dimSelectionOverlay: Bool = true
+    /// When true: dims the unselected area (non-selection), making selection stand out
+    @Published var dimSelectionOverlay: Bool = false
     @Published var hotkeys: [CaptureType: HotKeyCombination] = HotKeyCombination.default()
 
     var expandedSavePath: String {

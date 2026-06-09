@@ -5,7 +5,7 @@ final class PreferencesWindow: NSWindow, NSWindowDelegate {
     private let hostingView: NSHostingView<PreferencesView>
 
     init() {
-        let size = NSSize(width: 580, height: 500)
+        let size = NSSize(width: 900, height: 600)
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let origin = CGPoint(
             x: screen.frame.midX - size.width / 2,
@@ -24,16 +24,21 @@ final class PreferencesWindow: NSWindow, NSWindowDelegate {
 
         title = "Settings"
         isReleasedWhenClosed = false
-        minSize = NSSize(width: 480, height: 380)
+        minSize = NSSize(width: 700, height: 500)
         setFrameAutosaveName("PreferencesWindow")
         hostingView.frame = NSRect(origin: .zero, size: size)
-        delegate = self
         hostingView.autoresizingMask = [.width, .height]
         contentView = hostingView
+        delegate = self
     }
 
     func show() {
         WindowLifecycle.didOpen(self)
+    }
+
+    // ESC closes the preferences window
+    override func cancelOperation(_ sender: Any?) {
+        performClose(sender)
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -91,7 +96,7 @@ private struct PreferencesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationSplitViewStyle(.balanced)
-        .frame(width: 560, height: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDisappear { prefs.save() }
     }
 
@@ -190,8 +195,8 @@ private struct PreferencesView: View {
                 // auto-dismiss slider now lives in After Capture section
             }
             Section("Selection Overlay") {
-                Toggle("Dim screen during selection", isOn: $prefs.dimSelectionOverlay)
-                    .help("When off, no dark overlay is shown during area selection — only the crosshair cursor changes. Shottr-style minimal mode.")
+                Toggle("Dim unselected area", isOn: $prefs.dimSelectionOverlay)
+                    .help("When on, darkens the area outside your selection, making it stand out. Off by default for a minimal, Shottr-style interface.")
                 Toggle("Show magnifier", isOn: $prefs.showMagnifier)
                 Toggle("Show crosshair", isOn: $prefs.showCrosshair)
             }

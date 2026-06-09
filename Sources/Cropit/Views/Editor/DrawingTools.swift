@@ -26,7 +26,7 @@ struct Annotation: Identifiable {
             return CGRect(origin: origin, size: size).standardized.expand(hitInset).contains(point)
         case .circle(let origin, let size):
             return CGRect(origin: origin, size: size).standardized.expand(hitInset).contains(point)
-        case .text(let pos, let text, let fontSize):
+        case .text(let pos, let text, let fontSize, _):
             let approx = CGSize(width: CGFloat(text.count) * fontSize * 0.6, height: fontSize * 1.4)
             return CGRect(origin: pos, size: approx).expand(hitInset).contains(point)
         case .blur(let origin, let size):
@@ -76,8 +76,8 @@ struct Annotation: Identifiable {
             copy.type = .rect(origin: origin + delta, size: size)
         case .circle(let origin, let size):
             copy.type = .circle(origin: origin + delta, size: size)
-        case .text(let pos, let text, let fontSize):
-            copy.type = .text(position: pos + delta, text: text, fontSize: fontSize)
+        case .text(let pos, let text, let fontSize, let style):
+            copy.type = .text(position: pos + delta, text: text, fontSize: fontSize, style: style)
         case .blur(let origin, let size):
             copy.type = .blur(origin: origin + delta, size: size)
         case .highlight(let origin, let size):
@@ -104,13 +104,31 @@ struct Annotation: Identifiable {
     }
 }
 
+enum TextStyle: Equatable {
+    case regular, bold, italic, boldItalic
+
+    var weight: Font.Weight {
+        switch self {
+        case .bold, .boldItalic: return .semibold
+        default: return .regular
+        }
+    }
+
+    var design: Font.Design? {
+        switch self {
+        case .italic, .boldItalic: return .default  // SwiftUI doesn't support italic directly, use NSFont
+        default: return nil
+        }
+    }
+}
+
 enum AnnotationType {
     case arrow(start: CGPoint, end: CGPoint)
     case curvedArrow(start: CGPoint, control: CGPoint, end: CGPoint)
     case line(start: CGPoint, end: CGPoint)
     case rect(origin: CGPoint, size: CGSize)
     case circle(origin: CGPoint, size: CGSize)
-    case text(position: CGPoint, text: String, fontSize: CGFloat)
+    case text(position: CGPoint, text: String, fontSize: CGFloat, style: TextStyle = .regular)
     case blur(origin: CGPoint, size: CGSize)
     case highlight(origin: CGPoint, size: CGSize)
     case smartHighlight(origin: CGPoint, size: CGSize)
