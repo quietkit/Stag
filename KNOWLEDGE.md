@@ -61,3 +61,14 @@
 
 ---
 *Use this file to refresh your context without re‑reading the full analysis.*
+
+## System Overview (Token‑Efficient Summary)
+- **Architecture**: macOS AppKit + SwiftUI hybrid (NSWindow + NSHostingView).
+- **Capture stack**: ScreenCaptureKit for video/GIF, ImageIO for GIF encoding (patches GIF87a → GIF89a), Vision for OCR (Arabic support via `automaticallyDetectsLanguage=true`, `usesLanguageCorrection=false`).
+- **Window lifecycle**: `WindowLifecycle` enum implements Shottr‑style activation policy – app launches as `.accessory`, switches to `.regular` when Editor/Settings/History open, returns to `.accessory` when all close.
+- **Preferences defaults**: auto‑copy, open‑in‑editor action, thumbnail disabled, save path `~/Desktop/Cropit Screenshots`, file prefix `Cropit_` (editable).
+- **UI utilities**: custom `ToastWindow` (auto‑dismiss, non‑intrusive), thumbnail positioning based on screen visible frame, `FloatingThumbnailWindow`, `HistoryBrowserWindow`.
+- **GIF handling**: logical size × backingScaleFactor for retina, post‑encode byte‑patch for GIF89a compliance.
+- **Audio**: `MicrophoneCaptureManager` mixes system and mic audio via DSP normalization.
+- **Hot‑keys**: global monitors, configurable shortcuts, conflict‑aware manager.
+- **Recent changes**: unified `WindowLifecycle` usage, default save folder creation, OCR improvements, GIF89a patch, toast notifications, updated defaults.

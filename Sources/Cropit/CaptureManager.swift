@@ -7,6 +7,8 @@ final class CaptureManager {
     private var currentSource: CaptureSource?
     private var thumbnailWindow: FloatingThumbnailWindow?
     private var lastCaptureType: CaptureType = .area
+    private var recordingKeyMonitor: Any?
+    private var recordingStopHandler: (() -> Void)?
 
     init(store: AppStore) {
         self.store = store
@@ -124,7 +126,7 @@ final class CaptureManager {
         case .scrolling:
             return ScrollingCaptureSource()
         case .recording:
-            return MediaCaptureSource(
+            let source = MediaCaptureSource(
                 type: .recording,
                 recorder: ScreenRecorder(),
                 filePrefix: "Recording",
@@ -137,8 +139,10 @@ final class CaptureManager {
                     return String(format: "%02d:%02d", m, s)
                 }
             )
+            setupRecordingEscapeHandling(for: source)
+            return source
         case .gif:
-            return MediaCaptureSource(
+            let source = MediaCaptureSource(
                 type: .gif,
                 recorder: GIFRecorder(),
                 filePrefix: "GIF",
@@ -148,7 +152,46 @@ final class CaptureManager {
                     return "\(gr.frameCount) frames"
                 }
             )
+            setupRecordingEscapeHandling(for: source)
+            return source
         }
+    }
+
+    @MainActor
+    private func setupRecordingEscapeHandling(for source: MediaCaptureSource) {
+        source.onRecordingStarted = { [weak self] in
+            self?.installRecordingKeyMonitor(for: source)
+        }
+        source.onRecordingStopped = { [weak self] in
+            self?.removeRecordingKeyMonitor()
+        }
+    }
+
+    @MainActor
+    private func installRecordingKeyMonitor(for source: MediaCaptureSource) {
+        removeRecordingKeyMonitor()  // clean up any existing monitor first
+        recordingStopHandler = { [weak source] in
+            Task { @MainActor in
+                source?.requestStop()
+            }
+        }
+        recordingKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // ESC key code is 53
+            if event.keyCode == 53 {
+                self?.recordingStopHandler?()
+                return nil  // consume the event
+            }
+            return event
+        }
+    }
+
+    @MainActor
+    private func removeRecordingKeyMonitor() {
+        if let monitor = recordingKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            recordingKeyMonitor = nil
+        }
+        recordingStopHandler = nil
     }
 
     // MARK: - Image Pipeline
