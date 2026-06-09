@@ -112,7 +112,8 @@ private struct PreferencesView: View {
             case .advanced:  advancedTab
             }
         }
-        .padding(20)
+        .padding(24)
+        .font(.system(size: 12))  // Larger default text
     }
 
     // MARK: General
@@ -125,80 +126,110 @@ private struct PreferencesView: View {
                         Text(fmt.rawValue.uppercased()).tag(fmt)
                     }
                 }
+                .pickerStyle(.segmented)
+
                 if prefs.defaultFormat == .jpeg {
-                    Slider(value: $prefs.jpegQuality, in: 0.1...1.0, step: 0.1) {
-                        Text("Quality: \(Int(prefs.jpegQuality * 100))%")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Quality: \(Int(prefs.jpegQuality * 100))%").font(.system(size: 13, weight: .semibold))
+                        Slider(value: $prefs.jpegQuality, in: 0.1...1.0, step: 0.1)
                     }
                 }
-                HStack {
-                    Text("Save to")
-                    TextField("~/Desktop/Cropit Screenshots", text: $prefs.savePath)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11, design: .monospaced))
-                    Button("Choose…") {
-                        let panel = NSOpenPanel()
-                        panel.canChooseDirectories = true
-                        panel.canChooseFiles = false
-                        panel.canCreateDirectories = true
-                        panel.prompt = "Select"
-                        if panel.runModal() == .OK, let url = panel.url {
-                            // Store as tilde-relative if inside home dir
-                            let home = FileManager.default.homeDirectoryForCurrentUser.path
-                            let path = url.path
-                            prefs.savePath = path.hasPrefix(home)
-                                ? "~" + path.dropFirst(home.count)
-                                : path
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Save Location").font(.system(size: 13, weight: .semibold))
+                    HStack(spacing: 8) {
+                        TextField("~/Desktop/Cropit Screenshots", text: $prefs.savePath)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12, design: .monospaced))
+                            .controlSize(.large)
+                        Button("Choose…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseDirectories = true
+                            panel.canChooseFiles = false
+                            panel.canCreateDirectories = true
+                            panel.prompt = "Select"
+                            if panel.runModal() == .OK, let url = panel.url {
+                                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                                let path = url.path
+                                prefs.savePath = path.hasPrefix(home)
+                                    ? "~" + path.dropFirst(home.count)
+                                    : path
+                            }
                         }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
-                HStack {
-                    Text("File prefix")
-                    TextField("Cropit_", text: $prefs.filePrefix)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11, design: .monospaced))
-                        .frame(maxWidth: 160)
-                    Text("e.g. \(prefs.filePrefix.isEmpty ? "Cropit_" : prefs.filePrefix)2026-01-01.png")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("File Prefix").font(.system(size: 13, weight: .semibold))
+                    HStack(spacing: 8) {
+                        TextField("Cropit_", text: $prefs.filePrefix)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12, design: .monospaced))
+                            .frame(maxWidth: 180)
+                            .controlSize(.large)
+                        Text("e.g. \(prefs.filePrefix.isEmpty ? "Cropit_" : prefs.filePrefix)2026-01-01.png")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             Section("After Capture") {
                 Toggle("Show floating thumbnail", isOn: $prefs.showFloatingThumbnail)
-                    .help("When off, captures are saved/copied immediately with no preview overlay — like Shottr's no-overlay mode. Click the thumbnail to open editor, or press Esc to dismiss it.")
+                    .font(.system(size: 13))
+                    .help("When off, captures are saved/copied immediately with no preview overlay — like Shottr's no-overlay mode.")
                 if prefs.showFloatingThumbnail {
                     Picker("Action", selection: $prefs.afterCaptureAction) {
                         ForEach(AfterCaptureAction.allCases, id: \.self) { a in
                             Text(actionDisplayName(a)).tag(a)
                         }
                     }
-                    Slider(value: $prefs.autoDismissDelay, in: 1...30, step: 1) {
-                        Text("Auto-dismiss after \(Int(prefs.autoDismissDelay))s")
+                    .pickerStyle(.menu)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Auto-dismiss after \(Int(prefs.autoDismissDelay))s").font(.system(size: 13, weight: .semibold))
+                        Slider(value: $prefs.autoDismissDelay, in: 1...30, step: 1)
                     }
                 }
                 Toggle("Auto-copy to clipboard", isOn: $prefs.autoCopyToClipboard)
+                    .font(.system(size: 13))
                 Toggle("Auto-save captures", isOn: $prefs.automaticSave)
+                    .font(.system(size: 13))
             }
-            Section("Thumbnail") {
-                Picker("Position", selection: $prefs.thumbnailPosition) {
-                    ForEach(ThumbnailPosition.allCases, id: \.self) { p in
-                        Text(p.displayName).tag(p)
+
+            Section("Thumbnail Position & Size") {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Position").font(.system(size: 12, weight: .semibold))
+                        Picker("", selection: $prefs.thumbnailPosition) {
+                            ForEach(ThumbnailPosition.allCases, id: \.self) { p in
+                                Text(p.displayName).tag(p)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Size").font(.system(size: 12, weight: .semibold))
+                        Picker("", selection: $prefs.thumbnailSize) {
+                            ForEach(ThumbnailSize.allCases, id: \.self) { s in
+                                Text("\(Int(s.size.width))×\(Int(s.size.height))").tag(s)
+                            }
+                        }
+                        .pickerStyle(.menu)
                     }
                 }
-                Picker("Size", selection: $prefs.thumbnailSize) {
-                    ForEach(ThumbnailSize.allCases, id: \.self) { s in
-                        Text("\(Int(s.size.width))×\(Int(s.size.height))").tag(s)
-                    }
-                }
-                // auto-dismiss slider now lives in After Capture section
             }
+
             Section("Selection Overlay") {
                 Toggle("Dim unselected area", isOn: $prefs.dimSelectionOverlay)
-                    .help("When on, darkens the area outside your selection, making it stand out. Off by default for a minimal, Shottr-style interface.")
+                    .font(.system(size: 13))
+                    .help("When on, darkens the area outside your selection, making it stand out. Off by default for a minimal interface.")
                 Toggle("Show magnifier", isOn: $prefs.showMagnifier)
+                    .font(.system(size: 13))
                 Toggle("Show crosshair", isOn: $prefs.showCrosshair)
+                    .font(.system(size: 13))
             }
         }
     }
@@ -207,18 +238,22 @@ private struct PreferencesView: View {
 
     private var captureTab: some View {
         Form {
-            Section("Timer") {
-                Picker("Self-timer delay", selection: $prefs.captureDelay) {
+            Section("Self-Timer") {
+                Picker("Delay", selection: $prefs.captureDelay) {
                     Text("Off").tag(TimeInterval(0))
                     Text("3 seconds").tag(TimeInterval(3))
                     Text("5 seconds").tag(TimeInterval(5))
                     Text("10 seconds").tag(TimeInterval(10))
                 }
+                .pickerStyle(.segmented)
             }
-            Section("Preparation") {
+            Section("Preparation Options") {
                 Toggle("Hide desktop icons before capture", isOn: $prefs.hideDesktopIcons)
+                    .font(.system(size: 13))
                 Toggle("Freeze screen before area selection", isOn: $prefs.freezeScreenBeforeCapture)
+                    .font(.system(size: 13))
                 Toggle("Include window shadow in window capture", isOn: $prefs.windowCaptureShadow)
+                    .font(.system(size: 13))
             }
         }
     }
@@ -227,24 +262,30 @@ private struct PreferencesView: View {
 
     private var recordingTab: some View {
         Form {
-            Section("Quality") {
-                Picker("Preset", selection: $prefs.recordingQuality) {
+            Section("Video Quality") {
+                Picker("Quality Preset", selection: $prefs.recordingQuality) {
                     ForEach(RecordingQuality.allCases, id: \.self) { q in
                         Text("\(q.rawValue.capitalized) (\(q.fps) FPS)").tag(q)
                     }
                 }
+                .pickerStyle(.segmented)
             }
-            Section("Audio") {
+            Section("Audio Options") {
                 Toggle("Record system audio", isOn: $prefs.recordSystemAudio)
+                    .font(.system(size: 13))
                 Toggle("Record microphone", isOn: $prefs.recordMicrophone)
+                    .font(.system(size: 13))
             }
-            Section("Display") {
-                Toggle("Show cursor", isOn: $prefs.showCursorInRecording)
+            Section("Display Options") {
+                Toggle("Show cursor during recording", isOn: $prefs.showCursorInRecording)
+                    .font(.system(size: 13))
                 Toggle("Show keystrokes", isOn: $prefs.showKeystrokes)
+                    .font(.system(size: 13))
                     .help("Displays pressed keys as an overlay during recording")
             }
-            Section("Behavior") {
+            Section("System Behavior") {
                 Toggle("Auto-enable Do Not Disturb", isOn: $prefs.autoDND)
+                    .font(.system(size: 13))
                     .help("Automatically enables DND during recording and restores afterward")
             }
         }
@@ -255,22 +296,34 @@ private struct PreferencesView: View {
     private var overlaysTab: some View {
         Form {
             Section("Webcam Picture-in-Picture") {
-                Toggle("Enable overlay", isOn: $prefs.webcamEnabled)
+                Toggle("Enable webcam overlay", isOn: $prefs.webcamEnabled)
+                    .font(.system(size: 13))
                 if prefs.webcamEnabled {
-                    Picker("Position", selection: $prefs.webcamPosition) {
-                        ForEach(WebcamPosition.allCases, id: \.self) { pos in
-                            Text(pos.displayName).tag(pos)
+                    HStack(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Position").font(.system(size: 12, weight: .semibold))
+                            Picker("", selection: $prefs.webcamPosition) {
+                                ForEach(WebcamPosition.allCases, id: \.self) { pos in
+                                    Text(pos.displayName).tag(pos)
+                                }
+                            }
+                            .pickerStyle(.menu)
                         }
-                    }
-                    Picker("Size", selection: $prefs.webcamSize) {
-                        ForEach(WebcamSize.allCases, id: \.self) { size in
-                            Text("\(Int(size.size.width))×\(Int(size.size.height))").tag(size)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Size").font(.system(size: 12, weight: .semibold))
+                            Picker("", selection: $prefs.webcamSize) {
+                                ForEach(WebcamSize.allCases, id: \.self) { size in
+                                    Text("\(Int(size.size.width))×\(Int(size.size.height))").tag(size)
+                                }
+                            }
+                            .pickerStyle(.menu)
                         }
                     }
                 }
             }
-            Section("Mouse Clicks") {
+            Section("Mouse Click Indicator") {
                 Toggle("Show click ripples", isOn: $prefs.showMouseClicks)
+                    .font(.system(size: 13))
                     .help("Displays an animated ripple at each mouse click during recording")
             }
         }

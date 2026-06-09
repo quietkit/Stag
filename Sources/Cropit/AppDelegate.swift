@@ -79,8 +79,7 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
         // ── Tools ───────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
         menu.addItem(sectionHeader("TOOLS"))
-        // OCR has no shortcut — give it an empty equivalent so the column stays aligned
-        menu.addItem(capture("OCR — Scan Text",  #selector(captureOCR),      "", cs))
+        menu.addItem(capture("OCR — Scan Text",  #selector(captureOCR),      "t", .command))
         menu.addItem(capture("Open Image…",      #selector(openImageFile),   "o", .command))
         menu.addItem(capture("Capture History",  #selector(openHistory),     "h", .command))
         menu.addItem(capture("Settings…",        #selector(openSettings),    ",", .command))
