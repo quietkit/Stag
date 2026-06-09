@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import Vision
 
 final class CaptureManager {
     private let store: AppStore
@@ -86,8 +87,14 @@ final class CaptureManager {
                     DesktopIconsManager.shared.restore()
                     DNDManager.shared.restore()
                     self.currentSource = nil
+                    // Cast first — pattern-matching on `Error` existential doesn't work directly
                     if let captureError = error as? CaptureError {
-                        self.store.didFail(with: captureError)
+                        if case .noActiveCapture = captureError {
+                            // User cancelled (ESC / click-away) — silent reset, no alert
+                            self.store.resetState()
+                        } else {
+                            self.store.didFail(with: captureError)
+                        }
                     } else {
                         self.store.didFail(with: .captureFailed(reason: error.localizedDescription))
                     }
@@ -303,5 +310,65 @@ final class CaptureManager {
     private func openEditor(with image: NSImage) {
         let editor = EditorWindow(image: image)
         editor.show()
+    }
+
+    // MARK: - OCR Capture
+
+    /// Show the area-selection overlay, capture the selected region, run Vision OCR,
+    /// copy the recognised text to the clipboard and show a brief HUD notification.
+    @MainActor
+    func startOCRCapture() {
+        guard currentSource == nil else { return }
+        store.captureState = .selecting
+
+        let prefs = store.preferences
+        let dimOverlay = prefs.dimSelectionOverlay
+        let overlay = SelectionOverlayWindow(frozenImage: nil, dimOverlay: dimOverlay)
+        overlay.onCapture = { [weak self] cgImage in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.runOCR(on: cgImage)
+                self.store.resetState()
+            }
+        }
+        overlay.onCancel = { [weak self] in
+            self?.store.resetState()
+        }
+        overlay.show()
+    }
+
+    private func runOCR(on cgImage: CGImage) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let request = VNRecognizeTextRequest { request, _ in
+                defer { continuation.resume() }
+                let observations = request.results as? [VNRecognizedTextObservation] ?? []
+                let text = observations
+                    .compactMap { $0.topCandidates(1).first?.string }
+                    .joined(separator: "\n")
+                DispatchQueue.main.async {
+                    if text.isEmpty {
+                        self.showOCRNotification("No text found")
+                    } else {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                        self.showOCRNotification("Copied \(text.count) characters")
+                    }
+                }
+            }
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+
+            try? VNImageRequestHandler(cgImage: cgImage, options: [:])
+                .perform([request])
+        }
+    }
+
+    private func showOCRNotification(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "OCR Complete"
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }
