@@ -25,7 +25,11 @@ struct EditorView: View {
     @State private var selectedAnnotationId: UUID?
     @State private var currentColor: Color = .red
     @State private var currentLineWidth: CGFloat = 2
+    @State private var currentLineStyle: LineStyle = .solid
     @State private var fillShapes = false
+
+    // Color history (last 8 used colors)
+    @State private var colorHistory: [Color] = []
 
     // Transient drag state
     @State private var dragStart: CGPoint?
@@ -425,7 +429,8 @@ struct EditorView: View {
                 previewAnnotation = Annotation(
                     type: previewType(from: s, to: c),
                     color: currentColor,
-                    lineWidth: currentLineWidth
+                    lineWidth: currentLineWidth,
+                    lineStyle: currentLineStyle
                 )
             }
             renderAnnotation(previewAnnotation, ctx: &ctx, scale: scale, offset: offset, geo: geo, highlight: false)
@@ -439,10 +444,11 @@ struct EditorView: View {
         case .arrow(let start, let end):
             let sa = cgApply(start, scale: scale, offset: offset)
             let ea = cgApply(end, scale: scale, offset: offset)
-            var path = Path()
-            path.move(to: sa)
-            path.addLine(to: ea)
-            ctx.stroke(path, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+
+            // Draw main line with line style
+            drawStyledLine(from: sa, to: ea, color: annotation.color, lineWidth: annotation.lineWidth, style: annotation.lineStyle, ctx: &ctx)
+
+            // Draw arrow head
             let angle = atan2(ea.y - sa.y, ea.x - sa.x)
             let headLen: CGFloat = 12
             let headAngle: CGFloat = .pi / 7
@@ -455,10 +461,7 @@ struct EditorView: View {
         case .line(let start, let end):
             let sl = cgApply(start, scale: scale, offset: offset)
             let el = cgApply(end, scale: scale, offset: offset)
-            var linePath = Path()
-            linePath.move(to: sl)
-            linePath.addLine(to: el)
-            ctx.stroke(linePath, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+            drawStyledLine(from: sl, to: el, color: annotation.color, lineWidth: annotation.lineWidth, style: annotation.lineStyle, ctx: &ctx)
         case .rect(let origin, let size):
             let r = CGRect(origin: origin, size: size).standardized
             let vr = applyRect(r, scale: scale, offset: offset)
@@ -807,9 +810,9 @@ struct EditorView: View {
                     guard r.width > 5 && r.height > 5 else { return }
                     annotations.append(Annotation(type: .blur(origin: r.origin, size: r.size), color: currentColor, fillColor: fc, lineWidth: currentLineWidth))
                 case .arrow:
-                    annotations.append(Annotation(type: .arrow(start: s, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth))
+                    annotations.append(Annotation(type: .arrow(start: s, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle))
                 case .line:
-                    annotations.append(Annotation(type: .line(start: s, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth))
+                    annotations.append(Annotation(type: .line(start: s, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle))
                 case .curvedArrow:
                     let mid = CGPoint(x: (s.x + pt.x) / 2, y: (s.y + pt.y) / 2)
                     let dx = pt.x - s.x
@@ -817,7 +820,7 @@ struct EditorView: View {
                     let perpX = -dy * 0.3
                     let perpY = dx * 0.3
                     let control = CGPoint(x: mid.x + perpX, y: mid.y + perpY)
-                    annotations.append(Annotation(type: .curvedArrow(start: s, control: control, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth))
+                    annotations.append(Annotation(type: .curvedArrow(start: s, control: control, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle))
                 case .rect:
                     annotations.append(Annotation(type: .rect(origin: s, size: CGSize(width: pt.x - s.x, height: pt.y - s.y)), color: currentColor, fillColor: fc, lineWidth: currentLineWidth))
                 case .circle:
@@ -1162,6 +1165,20 @@ struct EditorView: View {
     private var toolOptionsPanel: some View {
         HStack(spacing: 8) {
             switch currentTool {
+            case .arrow, .line, .curvedArrow:
+                HStack(spacing: 4) {
+                    Text("Style:")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    Picker("", selection: $currentLineStyle) {
+                        ForEach(LineStyle.allCases, id: \.self) { style in
+                            Text(style.displayName).tag(style)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 80)
+                    .controlSize(.small)
+                }
             case .text:
                 HStack(spacing: 6) {
                     Text("Font:")
@@ -1448,6 +1465,16 @@ struct EditorView: View {
 
     private var colorStrip: some View {
         HStack(spacing: 3) {
+            // Recent colors (with divider if any exist)
+            if !colorHistory.isEmpty {
+                ForEach(colorHistory, id: \.self) { color in
+                    colorSwatch(color)
+                }
+                Capsule()
+                    .fill(Color.secondary.opacity(0.15))
+                    .frame(width: 1, height: 12)
+            }
+            // Preset colors
             ForEach(editorColors, id: \.self) { color in
                 colorSwatch(color)
             }
@@ -1458,6 +1485,7 @@ struct EditorView: View {
     private func colorSwatch(_ color: Color) -> some View {
         Button {
             currentColor = color
+            recordColorUsage(color)
         } label: {
             Circle()
                 .fill(color)
@@ -1487,6 +1515,9 @@ struct EditorView: View {
             .scaleEffect(0.7)
             .help("Pick custom color")
             .padding(.horizontal, 4)
+            .onChange(of: currentColor) { newColor in
+                recordColorUsage(newColor)
+            }
     }
 
     private var zoomControls: some View {
@@ -1602,6 +1633,68 @@ struct EditorView: View {
         .help(help)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.35)
+    }
+
+    // MARK: - Color History
+
+    private func recordColorUsage(_ color: Color) {
+        // Remove if already in history
+        colorHistory.removeAll { $0 == color }
+        // Add to beginning
+        colorHistory.insert(color, at: 0)
+        // Keep only last 8
+        if colorHistory.count > 8 {
+            colorHistory.removeLast()
+        }
+    }
+
+    // MARK: - Styled Line Drawing
+
+    /// Efficiently draws a line with dashed/dotted style. O(n) complexity where n = distance.
+    private func drawStyledLine(from: CGPoint, to: CGPoint, color: Color, lineWidth: CGFloat, style: LineStyle, ctx: inout GraphicsContext) {
+        if style == .solid {
+            // Fast path: solid lines use native rendering
+            var path = Path()
+            path.move(to: from)
+            path.addLine(to: to)
+            ctx.stroke(path, with: .color(color), lineWidth: lineWidth)
+            return
+        }
+
+        // Dashed/dotted: draw segments based on dash pattern
+        let dashPattern = style.dashPattern
+        let totalPattern = dashPattern.reduce(0, +)
+        guard totalPattern > 0 else { return }
+
+        let dx = to.x - from.x
+        let dy = to.y - from.y
+        let distance = hypot(dx, dy)
+        guard distance > 0 else { return }
+
+        let unitX = dx / distance
+        let unitY = dy / distance
+        var currentDist: CGFloat = 0
+        var patternIdx = 0
+        var isDrawing = true
+
+        while currentDist < distance {
+            let segmentLen = dashPattern[patternIdx % dashPattern.count]
+            let nextDist = min(currentDist + segmentLen, distance)
+            let segmentLen_ = nextDist - currentDist
+
+            if isDrawing && segmentLen_ > 0.5 {
+                let startPt = CGPoint(x: from.x + unitX * currentDist, y: from.y + unitY * currentDist)
+                let endPt = CGPoint(x: from.x + unitX * nextDist, y: from.y + unitY * nextDist)
+                var segPath = Path()
+                segPath.move(to: startPt)
+                segPath.addLine(to: endPt)
+                ctx.stroke(segPath, with: .color(color), lineWidth: lineWidth)
+            }
+
+            currentDist = nextDist
+            patternIdx += 1
+            isDrawing.toggle()
+        }
     }
 
     // MARK: - Export
