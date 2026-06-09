@@ -67,8 +67,7 @@ struct EditorView: View {
     @State private var panOffset: CGSize = .zero
 
     // Backdrop
-    @State private var backdropEnabled = false
-    @State private var backdropColor: Color = .white
+    @State private var backdrop = BackdropStyle()
 
     // Rotation
     @State private var rotation: CGFloat = 0
@@ -109,6 +108,10 @@ struct EditorView: View {
         VStack(spacing: 0) {
             toolbar
             toolOptionsPanel
+            if backdrop.isActive {
+                Divider()
+                beautifyPanel
+            }
             Divider()
             canvasArea
             footer
@@ -402,15 +405,43 @@ struct EditorView: View {
 
     // MARK: - Layers
 
+    @ViewBuilder
     private func imageLayer(geo: GeometryProxy) -> some View {
-        ZStack {
-            if backdropEnabled {
-                backdropColor
+        let (scale, offset) = computeTransform(geo: geo)
+        let imgSize = workingImage.size
+        let imageRect = CGRect(x: offset.width, y: offset.height,
+                               width: imgSize.width * scale, height: imgSize.height * scale)
+
+        if backdrop.isActive {
+            let framed = backdropFramedRect(geo: geo)
+            let radius = min(backdrop.cornerRadius * scale, min(framed.width, framed.height) / 2)
+            let barH = backdrop.showWindowFrame ? BackdropMetrics.barHeight(width: imgSize.width) * scale : 0
+
+            // Backdrop fills the exported card area.
+            BackdropBackground(style: backdrop)
+                .frame(width: framed.width, height: framed.height)
+                .position(x: framed.midX, y: framed.midY)
+
+            // Screenshot + optional window chrome, rounded + shadowed as one card.
+            VStack(spacing: 0) {
+                if backdrop.showWindowFrame {
+                    WindowChromeBar(height: barH)
+                }
+                Image(nsImage: workingImage)
+                    .resizable()
+                    .frame(width: imageRect.width, height: imageRect.height)
             }
+            .clipShape(RoundedRectangle(cornerRadius: radius))
+            .shadow(color: .black.opacity(backdrop.shadowOpacity),
+                    radius: backdrop.shadowRadius * scale * 0.6,
+                    y: backdrop.shadowRadius * scale * 0.25)
+            .frame(width: imageRect.width, height: imageRect.height + barH)
+            .position(x: imageRect.midX, y: imageRect.midY - barH / 2)
+        } else {
             Image(nsImage: workingImage)
                 .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: geo.size.width, height: geo.size.height)
+                .frame(width: imageRect.width, height: imageRect.height)
+                .position(x: imageRect.midX, y: imageRect.midY)
         }
     }
 
@@ -613,14 +644,45 @@ struct EditorView: View {
     // MARK: - Coordinate helpers
 
     private func computeTransform(geo: GeometryProxy) -> (CGFloat, CGSize) {
-        let imgSize = image.size
-        let baseScale = min(geo.size.width / imgSize.width, geo.size.height / imgSize.height)
+        // Fit the screenshot — plus any backdrop padding/frame — into the canvas.
+        // Using workingImage.size (not the original image.size) keeps annotations
+        // aligned after a crop.
+        let imgSize = workingImage.size
+        let ins = backdropInsets()
+        let boxW = imgSize.width + ins.left + ins.right
+        let boxH = imgSize.height + ins.top + ins.bottom
+        let baseScale = min(geo.size.width / boxW, geo.size.height / boxH)
         let scale = baseScale * zoomScale
+        let boxOriginX = (geo.size.width - boxW * scale) / 2 + panOffset.width
+        let boxOriginY = (geo.size.height - boxH * scale) / 2 + panOffset.height
         let offset = CGSize(
-            width: (geo.size.width - imgSize.width * scale) / 2 + panOffset.width,
-            height: (geo.size.height - imgSize.height * scale) / 2 + panOffset.height
+            width: boxOriginX + ins.left * scale,
+            height: boxOriginY + ins.top * scale
         )
         return (scale, offset)
+    }
+
+    /// Backdrop insets around the screenshot, in image-space points.
+    /// `.none` → zero insets, so the transform reduces to a plain centered fit.
+    private func backdropInsets() -> NSEdgeInsets {
+        guard backdrop.isActive else { return NSEdgeInsets() }
+        let size = workingImage.size
+        let pad = BackdropMetrics.padding(content: size, style: backdrop)
+        let bar = backdrop.showWindowFrame ? BackdropMetrics.barHeight(width: size.width) : 0
+        return NSEdgeInsets(top: pad + bar, left: pad, bottom: pad, right: pad)
+    }
+
+    /// The full backdrop "card+padding" rect in view space (what gets exported).
+    private func backdropFramedRect(geo: GeometryProxy) -> CGRect {
+        let (scale, offset) = computeTransform(geo: geo)
+        let ins = backdropInsets()
+        let imgSize = workingImage.size
+        return CGRect(
+            x: offset.width - ins.left * scale,
+            y: offset.height - ins.top * scale,
+            width: (imgSize.width + ins.left + ins.right) * scale,
+            height: (imgSize.height + ins.top + ins.bottom) * scale
+        )
     }
 
     private func cgApply(_ point: CGPoint, scale: CGFloat, offset: CGSize) -> CGPoint {
@@ -1760,7 +1822,17 @@ struct EditorView: View {
         }
     }
 
+    /// Final exported image: the flattened annotated screenshot, wrapped in the
+    /// beautiful backdrop when one is active.
     private func exportImage() -> NSImage? {
+        guard let annotated = flattenAnnotated() else { return nil }
+        guard backdrop.isActive else { return annotated }
+        return Backdrop.compose(content: annotated, style: backdrop)
+    }
+
+    /// Flattens the screenshot + annotations (with rotation) onto a transparent
+    /// canvas. The backdrop is applied separately by `exportImage()`.
+    private func flattenAnnotated() -> NSImage? {
         let imgSize = workingImage.size
         let angleRad = rotation * .pi / 180
         let cosAngle = abs(cos(angleRad))
@@ -1779,14 +1851,10 @@ struct EditorView: View {
         ctx.rotate(by: angleRad)
         ctx.translateBy(x: -imgSize.width / 2, y: -imgSize.height / 2)
 
-        if backdropEnabled {
-            ctx.setFillColor(NSColor(backdropColor).cgColor)
-            ctx.fill(CGRect(origin: .zero, size: imgSize))
-        } else {
-            ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0))
-            ctx.fill(CGRect(origin: .zero, size: imgSize))
-        }
-        workingImage.draw(at: .zero, from: .zero, operation: .copy, fraction: 1)
+        // Transparent base — the backdrop (if any) is composited later.
+        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0))
+        ctx.fill(CGRect(origin: .zero, size: imgSize))
+        workingImage.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1)
 
         for annotation in annotations {
             ctx.setStrokeColor(annotation.color.cgColor ?? CGColor(red: 1, green: 1, blue: 1, alpha: 1))
@@ -2183,25 +2251,123 @@ struct EditorView: View {
         }
     }
 
-    private var backdropControl: some View {
-        HStack(spacing: 4) {
-            Button {
-                backdropEnabled.toggle()
-            } label: {
-                Image(systemName: backdropEnabled ? "rectangle.fill" : "rectangle")
-                    .font(.system(size: 10))
-                    .foregroundColor(backdropEnabled ? .accentColor : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help(backdropEnabled ? "Hide backdrop" : "Show backdrop")
+    // MARK: - Beautify panel
 
-            if backdropEnabled {
-                ColorPicker("", selection: $backdropColor, supportsOpacity: false)
-                    .labelsHidden()
-                    .scaleEffect(0.6)
-                    .frame(width: 16, height: 16)
+    private var beautifyPanel: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                // Backdrop kind
+                Picker("", selection: $backdrop.kind) {
+                    ForEach(BackdropKind.allCases, id: \.self) { k in
+                        Text(k.displayName).tag(k)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 230)
+
+                Divider().frame(height: 18)
+
+                // Kind-specific source picker
+                switch backdrop.kind {
+                case .solid:
+                    ColorPicker("", selection: $backdrop.solidColor, supportsOpacity: false)
+                        .labelsHidden().frame(width: 32)
+                case .gradient:
+                    gradientSwatches
+                case .image:
+                    HStack(spacing: 6) {
+                        Button("Desktop") { backdrop.wallpaper = desktopWallpaper() }
+                            .controlSize(.small)
+                        Button("Choose…") { importWallpaper() }
+                            .controlSize(.small)
+                    }
+                case .none:
+                    EmptyView()
+                }
+
+                Divider().frame(height: 18)
+
+                sliderControl("Padding", value: $backdrop.paddingFraction, range: 0...0.25)
+                sliderControl("Corners", value: $backdrop.cornerRadius, range: 0...48)
+                sliderControl("Shadow", value: $backdrop.shadowRadius, range: 0...60)
+
+                Toggle(isOn: $backdrop.showWindowFrame) {
+                    Image(systemName: "macwindow")
+                }
+                .toggleStyle(.button)
+                .controlSize(.small)
+                .help("Window frame")
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+        }
+        .background(Color.secondary.opacity(0.04))
+    }
+
+    private var gradientSwatches: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(BackdropStyle.gradients.enumerated()), id: \.offset) { idx, preset in
+                Button {
+                    backdrop.gradientIndex = idx
+                } label: {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(preset.swiftUIGradient)
+                        .frame(width: 22, height: 22)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(backdrop.gradientIndex == idx ? Color.accentColor : Color.secondary.opacity(0.25),
+                                        lineWidth: backdrop.gradientIndex == idx ? 2 : 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(preset.name)
             }
         }
+    }
+
+    private func sliderControl(_ label: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>) -> some View {
+        HStack(spacing: 4) {
+            Text(label).font(.system(size: 9)).foregroundColor(.secondary)
+            Slider(value: value, in: range).frame(width: 70).controlSize(.mini)
+        }
+    }
+
+    private func desktopWallpaper() -> NSImage? {
+        guard let screen = window.screen ?? NSScreen.main,
+              let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
+    private func importWallpaper() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.beginSheetModal(for: window) { resp in
+            guard resp == .OK, let url = panel.url else { return }
+            backdrop.wallpaper = NSImage(contentsOf: url)
+        }
+    }
+
+    private var backdropControl: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) {
+                backdrop.kind = backdrop.isActive ? .none : .gradient
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10))
+                Text("Beautify")
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundColor(backdrop.isActive ? .white : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(backdrop.isActive ? Color.accentColor : Color.secondary.opacity(0.12))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(backdrop.isActive ? "Turn off backdrop" : "Add a beautiful backdrop")
     }
 }
 
