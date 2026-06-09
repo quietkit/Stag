@@ -19,7 +19,7 @@ struct HistoryBrowserView: View {
     @State private var selectedId: UUID?
     @State private var hoveredId: UUID?
 
-    private let columns = [GridItem(.fixed(180), spacing: 12)]
+    private let columns = Array(repeating: GridItem(.fixed(180), spacing: 12), count: 3)
 
     private var filtered: [CaptureRecord] {
         let records = store.records
@@ -159,8 +159,6 @@ struct HistoryBrowserView: View {
         VStack(alignment: .leading, spacing: 4) {
             ZStack {
                 thumbnailImage(record)
-                    .resizable()
-                    .scaledToFill()
                     .frame(width: 180, height: 120)
                     .clipped()
                 RoundedRectangle(cornerRadius: 8)
@@ -170,6 +168,8 @@ struct HistoryBrowserView: View {
                     .alignmentGuide(.top) { _ in 0 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .scaleEffect(hoveredId == record.id ? 1.05 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: hoveredId)
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) { hoveredId = hovering ? record.id : nil }
             }

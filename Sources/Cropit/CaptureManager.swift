@@ -368,18 +368,24 @@ final class CaptureManager {
         let prefs = store.preferences
         let dimOverlay = prefs.dimSelectionOverlay
         let showMagnifier = prefs.showMagnifier
-        let overlay = SelectionOverlayWindow(frozenImage: nil, dimOverlay: dimOverlay, showMagnifier: showMagnifier)
-        overlay.onCapture = { [weak self] cgImage in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.runOCR(on: cgImage)
-                self.store.resetState()
+
+        Task { @MainActor in
+            // Clean loupe source so the magnifier reads true colors, not our overlay.
+            let sample: CGImage? = showMagnifier ? try? await ScreenComposite.capture() : nil
+            let overlay = SelectionOverlayWindow(frozenImage: nil, sampleImage: sample,
+                                                 dimOverlay: dimOverlay, showMagnifier: showMagnifier)
+            overlay.onCapture = { [weak self] cgImage in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.runOCR(on: cgImage)
+                    self.store.resetState()
+                }
             }
+            overlay.onCancel = { [weak self] in
+                self?.store.resetState()
+            }
+            overlay.show()
         }
-        overlay.onCancel = { [weak self] in
-            self?.store.resetState()
-        }
-        overlay.show()
     }
 
     private func runOCR(on cgImage: CGImage) async {
