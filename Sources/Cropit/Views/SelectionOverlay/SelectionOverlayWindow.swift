@@ -72,7 +72,7 @@ final class SelectionOverlayWindow: NSWindow {
 
     // MARK: Init
 
-    init(frozenImage: CGImage? = nil, dimOverlay: Bool = true) {
+    init(frozenImage: CGImage? = nil, dimOverlay: Bool = true, showMagnifier: Bool = true) {
         self.frozenImage = frozenImage
         let screens = NSScreen.screens
         let totalFrame = screens.reduce(NSZeroRect) { $0.union($1.frame) }
@@ -101,7 +101,8 @@ final class SelectionOverlayWindow: NSWindow {
                 self?.onCancel?()
                 self?.close()
             },
-            dimOverlay: dimOverlay
+            dimOverlay: dimOverlay,
+            showMagnifier: showMagnifier
         )
 
         // Use CrosshairHostingView so cursor rects are auto-managed by AppKit

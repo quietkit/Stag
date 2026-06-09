@@ -22,12 +22,19 @@ final class FloatingThumbnailWindow: NSWindow, NSWindowDelegate {
     private var autoDismissWork: DispatchWorkItem?
     private var autoDismissDelay: TimeInterval
 
-    init(autoDismissDelay: TimeInterval = 5) {
+    init(autoDismissDelay: TimeInterval = 5, position: ThumbnailPosition = .bottomRight) {
         self.autoDismissDelay = autoDismissDelay
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let startSize = CGSize(width: 240, height: 160)
         let margin: CGFloat = 20
-        let origin = CGPoint(x: screen.frame.maxX - startSize.width - margin, y: screen.frame.minY + margin)
+        let sf = screen.visibleFrame
+        let origin: CGPoint
+        switch position {
+        case .bottomRight: origin = CGPoint(x: sf.maxX - startSize.width - margin, y: sf.minY + margin)
+        case .bottomLeft:  origin = CGPoint(x: sf.minX + margin, y: sf.minY + margin)
+        case .topRight:    origin = CGPoint(x: sf.maxX - startSize.width - margin, y: sf.maxY - startSize.height - margin)
+        case .topLeft:     origin = CGPoint(x: sf.minX + margin, y: sf.maxY - startSize.height - margin)
+        }
 
         super.init(
             contentRect: NSRect(origin: origin, size: startSize),
@@ -160,8 +167,7 @@ final class FloatingThumbnailWindow: NSWindow, NSWindowDelegate {
 
     func show() {
         alphaValue = 0
-        makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        orderFrontRegardless()   // float above other apps without stealing keyboard focus
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.3
             ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.3, 1.0)

@@ -35,14 +35,20 @@ final class GIFRecorder: NSObject, CaptureRecorder, ObservableObject, @unchecked
             .appendingPathComponent("cropit_gif_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
+        // sourceRect is in logical points; width/height must be in physical pixels.
+        // Use the backing scale factor of the main (or matching) display.
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let pixelW = max(1, Int(config.outputSize.width  * scale))
+        let pixelH = max(1, Int(config.outputSize.height * scale))
+
         let streamConfig = SCStreamConfiguration()
-        streamConfig.width = Int(config.outputSize.width)
-        streamConfig.height = Int(config.outputSize.height)
+        streamConfig.width  = pixelW
+        streamConfig.height = pixelH
         streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
         streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
         streamConfig.showsCursor = config.showCursor
         streamConfig.queueDepth = 3
-        if #available(macOS 13.0, *), let rect = config.captureRect {
+        if let rect = config.captureRect {
             streamConfig.sourceRect = rect
         }
 
@@ -108,6 +114,15 @@ final class GIFRecorder: NSObject, CaptureRecorder, ObservableObject, @unchecked
         }
 
         CGImageDestinationFinalize(destination)
+
+        // ImageIO always writes "GIF87a" header even for animated GIFs with extension blocks.
+        // macOS Quick Look / Preview and many viewers refuse to animate GIF87a files.
+        // Patch bytes 4-5 in-place: "87" → "89" to produce a proper GIF89a header.
+        if let handle = try? FileHandle(forWritingTo: outputURL) {
+            handle.seek(toFileOffset: 4)
+            handle.write(Data([0x39]))  // '9' — turns "GIF87a" → "GIF89a"
+            try? handle.close()
+        }
     }
 
     private func applyFloydSteinberg(_ image: CGImage) -> CGImage {

@@ -1,7 +1,7 @@
 import Cocoa
 import SwiftUI
 
-final class PreferencesWindow: NSWindow {
+final class PreferencesWindow: NSWindow, NSWindowDelegate {
     private let hostingView: NSHostingView<PreferencesView>
 
     init() {
@@ -17,21 +17,27 @@ final class PreferencesWindow: NSWindow {
 
         super.init(
             contentRect: NSRect(origin: origin, size: size),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
         title = "Settings"
         isReleasedWhenClosed = false
+        minSize = NSSize(width: 480, height: 380)
+        setFrameAutosaveName("PreferencesWindow")
         hostingView.frame = NSRect(origin: .zero, size: size)
+        delegate = self
         hostingView.autoresizingMask = [.width, .height]
         contentView = hostingView
     }
 
     func show() {
-        NSApp.activate(ignoringOtherApps: true)
-        makeKeyAndOrderFront(nil)
+        WindowLifecycle.didOpen(self)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        WindowLifecycle.didClose(self)
     }
 
     override var canBecomeKey: Bool { true }
@@ -121,9 +127,37 @@ private struct PreferencesView: View {
                 }
                 HStack {
                     Text("Save to")
-                    TextField("", text: $prefs.savePath)
+                    TextField("~/Desktop/Cropit Screenshots", text: $prefs.savePath)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11, design: .monospaced))
+                    Button("Choose…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = true
+                        panel.canChooseFiles = false
+                        panel.canCreateDirectories = true
+                        panel.prompt = "Select"
+                        if panel.runModal() == .OK, let url = panel.url {
+                            // Store as tilde-relative if inside home dir
+                            let home = FileManager.default.homeDirectoryForCurrentUser.path
+                            let path = url.path
+                            prefs.savePath = path.hasPrefix(home)
+                                ? "~" + path.dropFirst(home.count)
+                                : path
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                HStack {
+                    Text("File prefix")
+                    TextField("Cropit_", text: $prefs.filePrefix)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11, design: .monospaced))
+                        .frame(maxWidth: 160)
+                    Text("e.g. \(prefs.filePrefix.isEmpty ? "Cropit_" : prefs.filePrefix)2026-01-01.png")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
             }
             Section("After Capture") {
@@ -145,7 +179,7 @@ private struct PreferencesView: View {
             Section("Thumbnail") {
                 Picker("Position", selection: $prefs.thumbnailPosition) {
                     ForEach(ThumbnailPosition.allCases, id: \.self) { p in
-                        Text(p.rawValue.capitalized).tag(p)
+                        Text(p.displayName).tag(p)
                     }
                 }
                 Picker("Size", selection: $prefs.thumbnailSize) {

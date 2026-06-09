@@ -6,6 +6,7 @@ struct SelectionOverlayView: View {
     let onCapture: (CGRect) -> Void
     let onCancel: () -> Void
     var dimOverlay: Bool = true   // false = Shottr "no-overlay" mode (transparent background)
+    var showMagnifier: Bool = true
 
     @State private var dragStart: CGPoint?
     @State private var dragCurrent: CGPoint?
@@ -79,7 +80,7 @@ struct SelectionOverlayView: View {
 
     @ViewBuilder
     private var magnifierOverlay: some View {
-        if isDragging {
+        if isDragging && showMagnifier {
             MagnifierView(
                 mouseLocation: mouseLocation,
                 windowOrigin: screenFrame.origin,

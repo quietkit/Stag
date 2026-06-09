@@ -215,7 +215,7 @@ final class CaptureManager {
         if let existing = thumbnailWindow, existing.isVisible {
             thumbnail = existing
         } else {
-            thumbnail = FloatingThumbnailWindow(autoDismissDelay: prefs.autoDismissDelay)
+            thumbnail = FloatingThumbnailWindow(autoDismissDelay: prefs.autoDismissDelay, position: prefs.thumbnailPosition)
             self.thumbnailWindow = thumbnail
         }
 
@@ -262,7 +262,8 @@ final class CaptureManager {
         let saveDir = URL(fileURLWithPath: prefs.expandedSavePath)
         try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
         let ext = prefs.defaultFormat == .jpeg ? "jpg" : "png"
-        let url = saveDir.appendingPathComponent("Cropit_\(Date().shotTimestamp).\(ext)")
+        let prefix = prefs.filePrefix.isEmpty ? "Cropit_" : prefs.filePrefix
+        let url = saveDir.appendingPathComponent("\(prefix)\(Date().shotTimestamp).\(ext)")
 
         switch prefs.defaultFormat {
         case .png: image.pngWrite(to: url)
@@ -323,7 +324,8 @@ final class CaptureManager {
 
         let prefs = store.preferences
         let dimOverlay = prefs.dimSelectionOverlay
-        let overlay = SelectionOverlayWindow(frozenImage: nil, dimOverlay: dimOverlay)
+        let showMagnifier = prefs.showMagnifier
+        let overlay = SelectionOverlayWindow(frozenImage: nil, dimOverlay: dimOverlay, showMagnifier: showMagnifier)
         overlay.onCapture = { [weak self] cgImage in
             guard let self else { return }
             Task { @MainActor in
@@ -347,28 +349,29 @@ final class CaptureManager {
                     .joined(separator: "\n")
                 DispatchQueue.main.async {
                     if text.isEmpty {
-                        self.showOCRNotification("No text found")
+                        ToastWindow.show("No text found",
+                                         icon: "text.slash",
+                                         iconColor: .secondary)
                     } else {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
-                        self.showOCRNotification("Copied \(text.count) characters")
+                        let lines = text.components(separatedBy: "\n").count
+                        ToastWindow.show("Copied \(lines) line\(lines == 1 ? "" : "s")",
+                                         icon: "doc.on.clipboard.fill",
+                                         iconColor: .green)
                     }
                 }
             }
             request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
+            // Auto-detect language so Arabic, English, French, etc. all work
+            // without the caller having to configure anything.
+            // usesLanguageCorrection is intentionally OFF for multilingual accuracy —
+            // the English-tuned correction model corrupts Arabic and mixed scripts.
+            request.automaticallyDetectsLanguage = true
+            request.usesLanguageCorrection = false
 
             try? VNImageRequestHandler(cgImage: cgImage, options: [:])
                 .perform([request])
         }
-    }
-
-    private func showOCRNotification(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = "OCR Complete"
-        alert.informativeText = message
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
     }
 }

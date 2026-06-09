@@ -20,6 +20,29 @@
     <true/>
     <key>NSScreenCaptureDescription</key>
     <string>Cropit needs screen recording permission to capture screenshots and record your screen.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Cropit can optionally record microphone audio during screen recordings.</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.png</string>
+                <string>public.jpeg</string>
+                <string>com.compuserve.gif</string>
+                <string>public.tiff</string>
+                <string>com.microsoft.bmp</string>
+                <string>public.heic</string>
+                <string>org.webmproject.webp</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>

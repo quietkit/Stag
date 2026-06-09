@@ -90,7 +90,7 @@ final class ScreenRecorder: NSObject, CaptureRecorder, ObservableObject, @unchec
         streamConfig.capturesAudio = config.captureSystemAudio
         streamConfig.showsCursor = config.showCursor
         streamConfig.queueDepth = 3
-        if #available(macOS 13.0, *), let rect = config.captureRect {
+        if let rect = config.captureRect {
             streamConfig.sourceRect = rect
         }
 
