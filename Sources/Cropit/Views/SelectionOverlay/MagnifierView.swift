@@ -71,17 +71,18 @@ final class MagnifierHostView: NSView {
     }
 
     private func sample(atPixelX px: Int, pixelY py: Int) -> CGImage? {
-        let r = captureRadius
         if let frozen = frozenImage {
-            // Frozen path — crop in image space (origin top-left).
-            let scale = sampleScale()
-            let side = Int(CGFloat(r) * 2)
-            let crop = CGRect(x: px - r, y: py - r, width: side, height: side)
+            // Frozen path — crop in image space (origin top-left). Scale the sample
+            // radius by the image's pixel density so the loupe field-of-view matches
+            // the live path (captureRadius points on each side) on Retina displays.
+            let rPx = max(1, Int((CGFloat(captureRadius) * sampleScale()).rounded()))
+            let side = rPx * 2
+            let crop = CGRect(x: px - rPx, y: py - rPx, width: side, height: side)
                 .intersection(CGRect(x: 0, y: 0, width: frozen.width, height: frozen.height))
             guard !crop.isNull, crop.width > 0 else { return nil }
-            _ = scale
             return frozen.cropping(to: crop)
         }
+        let r = captureRadius
         // Live fallback — convert view point back to a Cocoa screen point.
         let viewX = CGFloat(px), viewY = CGFloat(py)
         let screenX = screenFrame.minX + viewX

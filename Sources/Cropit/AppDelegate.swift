@@ -61,7 +61,6 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.toolTip = "Click for capture controls"
 
         let menu = NSMenu()
-        let cs: NSEvent.ModifierFlags = [.command, .shift]
 
         // ── Screenshot ──────────────────────────────────────────────────────
         menu.addItem(sectionHeader("SCREENSHOT"))
