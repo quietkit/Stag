@@ -19,7 +19,7 @@ struct HistoryBrowserView: View {
     @State private var selectedId: UUID?
     @State private var hoveredId: UUID?
 
-    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 12)]
+    private let columns = [GridItem(.fixed(180), spacing: 12)]
 
     private var filtered: [CaptureRecord] {
         let records = store.records
