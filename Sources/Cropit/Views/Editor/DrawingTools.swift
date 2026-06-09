@@ -11,6 +11,7 @@ struct Annotation: Identifiable {
     var fillColor: Color?
     var lineWidth: CGFloat
     var lineStyle: LineStyle = .solid  // solid, dashed, or dotted
+    var arrowHeadStyle: ArrowHeadStyle = .standard  // for arrow and curvedArrow
 
     func contains(point: CGPoint) -> Bool {
         let hitInset: CGFloat = 12
@@ -139,6 +140,18 @@ enum LineStyle: String, Codable, CaseIterable {
         case .solid: return []
         case .dashed: return [6, 4]      // 6 pixels on, 4 off
         case .dotted: return [2, 3]      // 2 pixels on, 3 off
+        }
+    }
+}
+
+enum ArrowHeadStyle: String, Codable, CaseIterable {
+    case standard, filled, circle
+
+    var displayName: String {
+        switch self {
+        case .standard: return "Standard"
+        case .filled: return "Filled"
+        case .circle: return "Circle"
         }
     }
 }
