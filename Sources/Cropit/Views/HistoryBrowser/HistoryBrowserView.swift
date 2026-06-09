@@ -143,8 +143,8 @@ struct HistoryBrowserView: View {
                 ForEach(filtered) { record in
                     thumbnailCell(record)
                         .frame(maxWidth: .infinity)
-                        .onTapGesture(count: 2) { openEditor(record) }
-                        .onTapGesture { selectedId = record.id }
+                .onTapGesture { openEditor(record) }
+                .onTapGesture(count: 2) { selectedId = record.id }
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(selectedId == record.id ? Color.accentColor.opacity(0.1) : .clear)
@@ -239,7 +239,7 @@ struct HistoryBrowserView: View {
 
     private func openEditor(_ record: CaptureRecord) {
         guard let image = NSImage(contentsOfFile: record.filePath) else { return }
-        let editor = EditorWindow(image: image)
+        let editor = EditorWindow(image: image, filePath: record.filePath)
         editor.title = record.date.formatted(date: .abbreviated, time: .shortened)
         editor.show()
     }

@@ -6,12 +6,14 @@ import Vision
 struct EditorView: View {
     let image: NSImage
     let window: NSWindow
+    let filePath: String?
 
     @State private var workingImage: NSImage
 
-    init(image: NSImage, window: NSWindow) {
+    init(image: NSImage, window: NSWindow, filePath: String? = nil) {
         self.image = image
         self.window = window
+        self.filePath = filePath
         _workingImage = State(initialValue: image)
     }
 
@@ -457,7 +459,6 @@ struct EditorView: View {
             // Draw arrow head based on style
             let angle = atan2(ea.y - sa.y, ea.x - sa.x)
             let headLen: CGFloat = 12
-            let headAngle: CGFloat = .pi / 7
             drawArrowHead(at: ea, angle: angle, length: headLen, style: annotation.arrowHeadStyle, color: annotation.color, lineWidth: annotation.lineWidth, ctx: &ctx)
         case .line(let start, let end):
             let sl = cgApply(start, scale: scale, offset: offset)
@@ -1525,7 +1526,7 @@ struct EditorView: View {
             .scaleEffect(0.7)
             .help("Pick custom color")
             .padding(.horizontal, 4)
-            .onChange(of: currentColor) { newColor in
+            .onChange(of: currentColor) { _, newColor in
                 recordColorUsage(newColor)
             }
     }
@@ -1813,11 +1814,9 @@ struct EditorView: View {
                 }
                 ctx.strokeEllipse(in: ce)
             case .text(let pos, let text, let fontSize, let style):
-                var fontSize_ = fontSize
-                var font = NSFont.systemFont(ofSize: fontSize_)
-                if style == .bold || style == .boldItalic {
-                    font = NSFont.boldSystemFont(ofSize: fontSize_)
-                }
+                let font = (style == .bold || style == .boldItalic)
+                    ? NSFont.boldSystemFont(ofSize: fontSize)
+                    : NSFont.systemFont(ofSize: fontSize)
                 let attrs: [NSAttributedString.Key: Any] = [
                     .font: font,
                     .foregroundColor: NSColor(annotation.color)

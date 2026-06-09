@@ -128,7 +128,8 @@ final class SelectionOverlayWindow: NSWindow {
         // first mouse-move, so it looks unchanged until you start dragging.
         Self.precisionCursor.set()
         DispatchQueue.main.async { [weak self] in
-            self?.invalidateCursorRects(for: self!.contentView!)
+            guard let self, let cv = self.contentView else { return }
+            self.invalidateCursorRects(for: cv)
         }
     }
 

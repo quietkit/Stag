@@ -31,7 +31,11 @@ struct RecordingConfig {
             }
         }()
         return RecordingConfig(
-            fps: preferences.recordingFps,
+            // FPS is driven by the quality preset (Low 15 / Med 30 / High 60) — the
+            // only control the user can actually set. The legacy `recordingFps` field
+            // had no UI, so reading it here silently pinned every recording to 30 fps
+            // regardless of the chosen preset.
+            fps: quality.fps,
             bitRate: bitRate,
             captureSystemAudio: preferences.recordSystemAudio,
             captureMicrophone: preferences.recordMicrophone,

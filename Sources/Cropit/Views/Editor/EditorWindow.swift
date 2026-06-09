@@ -2,7 +2,7 @@ import Cocoa
 import SwiftUI
 
 final class EditorWindow: NSWindow, NSWindowDelegate {
-    init(image: NSImage) {
+    init(image: NSImage, filePath: String? = nil) {
         let size = NSSize(width: 800, height: 600)
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
@@ -13,7 +13,7 @@ final class EditorWindow: NSWindow, NSWindowDelegate {
         title = "Annotate"
         isReleasedWhenClosed = false
         minSize = NSSize(width: 400, height: 300)
-        contentView = NSHostingView(rootView: EditorView(image: image, window: self))
+        contentView = NSHostingView(rootView: EditorView(image: image, window: self, filePath: filePath))
         delegate = self
         self.center()
     }
