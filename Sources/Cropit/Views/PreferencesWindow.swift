@@ -169,11 +169,16 @@ private struct PreferencesView: View {
                             .font(.system(size: 12, design: .monospaced))
                             .frame(maxWidth: 180)
                             .controlSize(.large)
-                        Text("e.g. \(prefs.filePrefix.isEmpty ? "Cropit_" : prefs.filePrefix)2026-01-01.png")
+                        Text("e.g. \(filenamePreview)")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
                     }
                 }
+
+                Toggle("Smart filenames (include the source app)", isOn: $prefs.useSmartFilenames)
+                    .font(.system(size: 13))
+                    .help("Names files after the app you captured, e.g. \"Safari 2026-…\". Falls back to the timestamp when unknown.")
             }
             Section("After Capture") {
                 Toggle("Show floating thumbnail", isOn: $prefs.showFloatingThumbnail)
@@ -485,6 +490,12 @@ private struct PreferencesView: View {
     }
 
     // MARK: Helpers
+
+    private var filenamePreview: String {
+        let prefix = prefs.filePrefix.isEmpty ? "Cropit_" : prefs.filePrefix
+        let mid = prefs.useSmartFilenames ? "Safari " : ""
+        return "\(prefix)\(mid)2026-01-01.png"
+    }
 
     private func actionDisplayName(_ action: AfterCaptureAction) -> String {
         switch action {

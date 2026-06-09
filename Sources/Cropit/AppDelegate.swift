@@ -325,6 +325,8 @@ private func capture(_ title: String, _ action: Selector,
             GetEventParameter(event, EventParamName(kEventParamDirectObject),
                               EventParamType(typeEventHotKeyID), nil,
                               MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
+            // Record the source app synchronously, while it's still frontmost.
+            CaptureContext.shared.recordFrontmostApp()
             Task { @MainActor in
                 NSApp.activate(ignoringOtherApps: true)
                 delegate.handleCarbonHotkey(id: hotkeyID.id)
@@ -399,6 +401,8 @@ private func capture(_ title: String, _ action: Selector,
         for (type, combo) in hotkeys {
             guard keyCode == combo.keyCode else { continue }
             guard mods == combo.modifierFlags else { continue }
+            // Record the source app now, while it's still frontmost (before we activate).
+            CaptureContext.shared.recordFrontmostApp()
             DispatchQueue.main.async { [self] in
                 NSApp.activate(ignoringOtherApps: true)
                 self.captureManager.startCapture(type: type)
