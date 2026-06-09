@@ -44,27 +44,41 @@ struct SelectionOverlayView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: screenFrame.width, height: screenFrame.height)
-                .allowsHitTesting(false)      // parent ZStack owns all gestures
-            if dimOverlay, let _ = selectionRect, isDragging {
-                Color.black.opacity(0.35)
-                    .allowsHitTesting(false)
-            }
-        } else if dimOverlay {
+                .allowsHitTesting(false)
             if let rect = selectionRect, isDragging {
+                if dimOverlay {
+                    // Dim mode ON: dim background
+                    Color.black.opacity(0.35)
+                        .allowsHitTesting(false)
+                } else {
+                    // Dim mode OFF: dim SELECTION instead
+                    Color.black.opacity(0.4)
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                        .allowsHitTesting(false)
+                }
+            }
+        } else if let rect = selectionRect, isDragging {
+            if dimOverlay {
+                // Dim background (unselected)
                 Path { path in
                     path.addRect(CGRect(origin: .zero, size: CGSize(width: screenFrame.width, height: screenFrame.height)))
                     path.addRect(rect)
                 }
                 .fill(Color.black.opacity(0.35), style: FillStyle(eoFill: true))
-                .allowsHitTesting(false)      // parent ZStack owns all gestures
+                .allowsHitTesting(false)
             } else {
-                // The dim colour must NOT capture its own gestures — doing so blocks
-                // the parent DragGesture and makes the overlay appear frozen.
-                Color.black.opacity(0.3)
+                // Dim SELECTION (selected area)
+                Color.black.opacity(0.4)
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
                     .allowsHitTesting(false)
             }
+        } else if dimOverlay && !isDragging {
+            // Initial overlay (before dragging starts) - only if dimming ON
+            Color.black.opacity(0.3)
+                .allowsHitTesting(false)
         }
-        // dimOverlay = false: fully transparent — parent layer handles all interaction
     }
 
     @ViewBuilder

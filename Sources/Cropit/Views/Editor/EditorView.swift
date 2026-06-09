@@ -345,6 +345,10 @@ struct EditorView: View {
             case (51, _), (117, _): // ⌫ or forward delete
                 deleteSelected()
                 return nil
+            case (8, _) where mods == [.command]: // ⌘C — copy image & close editor
+                exportAndCopy()
+                window.performClose(nil)
+                return nil
             case (53, _): // Esc — deselect if something is selected, otherwise close the editor
                 if selectedAnnotationId != nil {
                     selectedAnnotationId = nil

@@ -115,9 +115,12 @@ final class SelectionOverlayWindow: NSWindow {
     // MARK: Show / hide
 
     func show() {
+        Self.precisionCursor.push()   // Set cursor FIRST
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        Self.precisionCursor.push()   // push so pop() restores whatever was before
+        DispatchQueue.main.async {
+            NSCursor.current  // Force cursor update
+        }
     }
 
     // MARK: Capture
