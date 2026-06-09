@@ -157,24 +157,23 @@ struct HistoryBrowserView: View {
 
     private func thumbnailCell(_ record: CaptureRecord) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            thumbnailImage(record)
-                .frame(height: 120)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(hoveredId == record.id ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.1), lineWidth: 1)
-                )
-                .overlay(alignment: .topTrailing) {
-                    typeBadge(record.type)
-                        .padding(4)
-                }
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        hoveredId = hovering ? record.id : nil
-                    }
-                }
-                .contextMenu { cellContextMenu(record) }
+            ZStack {
+                thumbnailImage(record)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 180, height: 120)
+                    .clipped()
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(hoveredId == record.id ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.1), lineWidth: 1)
+                typeBadge(record.type)
+                    .padding(4)
+                    .alignmentGuide(.top) { _ in 0 }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { hoveredId = hovering ? record.id : nil }
+            }
+            .contextMenu { cellContextMenu(record) }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.date.formatted(date: .abbreviated, time: .shortened))
