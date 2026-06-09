@@ -77,10 +77,25 @@ final class SelectionOverlayWindow: NSWindow {
     ///   - sampleImage: clean composite the loupe samples from (independent of the
     ///     visible background) so pixel colors read true, not through our dim overlay.
     init(frozenImage: CGImage? = nil, sampleImage: CGImage? = nil,
-         dimOverlay: Bool = true, showMagnifier: Bool = true) {
+         dimOverlay: Bool = true, showMagnifier: Bool = true,
+         windows: [DetectedWindow] = []) {
         self.frozenImage = frozenImage
         let screens = NSScreen.screens
         let totalFrame = screens.reduce(NSZeroRect) { $0.union($1.frame) }
+
+        // Convert window frames (CG global, top-left origin, y-down) into the
+        // overlay's SwiftUI view space (origin at the overlay's top-left, y-down).
+        let primaryHeight = screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? (NSScreen.main?.frame.height ?? totalFrame.height)
+        let offsetY = totalFrame.maxY - primaryHeight
+        let windowHits: [WindowHit] = windows.map { w in
+            WindowHit(
+                rect: CGRect(x: w.frame.minX - totalFrame.minX,
+                             y: offsetY + w.frame.minY,
+                             width: w.frame.width, height: w.frame.height),
+                title: w.title
+            )
+        }
 
         super.init(
             contentRect: totalFrame,
@@ -108,7 +123,8 @@ final class SelectionOverlayWindow: NSWindow {
                 self?.close()
             },
             dimOverlay: dimOverlay,
-            showMagnifier: showMagnifier
+            showMagnifier: showMagnifier,
+            detectedWindows: windowHits
         )
 
         // Use CrosshairHostingView so cursor rects are auto-managed by AppKit
