@@ -16,7 +16,7 @@ private final class CrosshairHostingView<Content: View>: NSHostingView<Content> 
 final class SelectionOverlayWindow: NSWindow {
     var onCapture: ((CGImage) -> Void)?
     var onCancel:  (() -> Void)?
-    private let frozenImage: CGImage?
+    private let frozenImage: CGImage?      // visible frozen background (freeze pref)
 
     // MARK: Precision cursor — scope + crosshair, double-stroked for any background
     static let precisionCursor: NSCursor = {
@@ -72,7 +72,12 @@ final class SelectionOverlayWindow: NSWindow {
 
     // MARK: Init
 
-    init(frozenImage: CGImage? = nil, dimOverlay: Bool = true, showMagnifier: Bool = true) {
+    /// - Parameters:
+    ///   - frozenImage: shown as a frozen background (only when the freeze pref is on).
+    ///   - sampleImage: clean composite the loupe samples from (independent of the
+    ///     visible background) so pixel colors read true, not through our dim overlay.
+    init(frozenImage: CGImage? = nil, sampleImage: CGImage? = nil,
+         dimOverlay: Bool = true, showMagnifier: Bool = true) {
         self.frozenImage = frozenImage
         let screens = NSScreen.screens
         let totalFrame = screens.reduce(NSZeroRect) { $0.union($1.frame) }
@@ -95,6 +100,7 @@ final class SelectionOverlayWindow: NSWindow {
         let overlayView = SelectionOverlayView(
             screenFrame: totalFrame,
             frozenImage: frozenImage,
+            sampleImage: sampleImage ?? frozenImage,
             onCapture: { [weak self] rect in Task { await self?.performCapture(rect) } },
             onCancel:  { [weak self] in
                 Self.precisionCursor.pop()
@@ -115,11 +121,14 @@ final class SelectionOverlayWindow: NSWindow {
     // MARK: Show / hide
 
     func show() {
-        Self.precisionCursor.push()   // Set cursor FIRST
+        Self.precisionCursor.push()        // set the precision cursor first
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.main.async {
-            NSCursor.current  // Force cursor update
+        // Force it visible immediately — without this the cursor only updates on the
+        // first mouse-move, so it looks unchanged until you start dragging.
+        Self.precisionCursor.set()
+        DispatchQueue.main.async { [weak self] in
+            self?.invalidateCursorRects(for: self!.contentView!)
         }
     }
 

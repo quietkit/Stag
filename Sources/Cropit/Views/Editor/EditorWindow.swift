@@ -15,6 +15,7 @@ final class EditorWindow: NSWindow, NSWindowDelegate {
         minSize = NSSize(width: 400, height: 300)
         contentView = NSHostingView(rootView: EditorView(image: image, window: self))
         delegate = self
+        self.center()
     }
 
     func show() {
