@@ -60,13 +60,20 @@ final class MediaCaptureSource: CaptureSource {
         try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
         let outputURL = saveDir.appendingPathComponent("\(filePrefix)_\(Date().shotTimestamp).\(fileExtension)")
 
+        // Use a weak-box so onStop can close the HUD window immediately without
+        // waiting for encoding (which can take 2+ seconds for GIF).
+        final class Box<T: AnyObject> { weak var value: T? }
+        let hudBox = Box<CaptureHUDWindow>()
+
         let hud = CaptureHUDWindow(
             statusProvider: { [weak self] in
                 guard let self = self else { return "" }
                 return self.statusFormat(self.recorder.recorderState, self.recorder)
             },
-            onStop: { [weak self] in
+            onStop: { [weak self, hudBox] in
                 guard let self = self else { return }
+                // Close the HUD right away — don't wait for encoding.
+                hudBox.value?.close()
                 Task { @MainActor in
                     self.stopRequested = true
                     _ = await self.recorder.stopCapture()
@@ -75,6 +82,7 @@ final class MediaCaptureSource: CaptureSource {
                 }
             }
         )
+        hudBox.value = hud
 
         store.captureState = .capturing
         hud.show()
@@ -95,7 +103,8 @@ final class MediaCaptureSource: CaptureSource {
             }
         }
 
-        hud.close()
+        // hud may already be closed by onStop; guard against double-close
+        if hud.isVisible { hud.close() }
         store.captureState = .completed
         return .video(outputURL)
     }

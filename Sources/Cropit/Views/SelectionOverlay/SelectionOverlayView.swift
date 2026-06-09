@@ -23,14 +23,15 @@ struct SelectionOverlayView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
+                // Invisible base layer — guarantees the ZStack is always hit-testable,
+                // even in no-dim mode where all other layers are transparent.
+                Color.white.opacity(0.001)
                 dimmingOverlay
                 selectionOverlay
                 magnifierOverlay
             }
             .contentShape(Rectangle())
             .gesture(dragGesture)
-            .onAppear { NSCursor.crosshair.push() }
-            .onDisappear { NSCursor.crosshair.pop() }
         }
         .edgesIgnoringSafeArea(.all)
     }
@@ -42,6 +43,7 @@ struct SelectionOverlayView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: screenFrame.width, height: screenFrame.height)
+                .allowsHitTesting(false)      // parent ZStack owns all gestures
             if dimOverlay, let _ = selectionRect, isDragging {
                 Color.black.opacity(0.35)
                     .allowsHitTesting(false)
@@ -53,12 +55,15 @@ struct SelectionOverlayView: View {
                     path.addRect(rect)
                 }
                 .fill(Color.black.opacity(0.35), style: FillStyle(eoFill: true))
+                .allowsHitTesting(false)      // parent ZStack owns all gestures
             } else {
+                // The dim colour must NOT capture its own gestures — doing so blocks
+                // the parent DragGesture and makes the overlay appear frozen.
                 Color.black.opacity(0.3)
-                    .onTapGesture { }
+                    .allowsHitTesting(false)
             }
         }
-        // dimOverlay = false: no background dim at all — cursor is the only indicator
+        // dimOverlay = false: fully transparent — parent layer handles all interaction
     }
 
     @ViewBuilder
@@ -118,29 +123,35 @@ struct SelectionRectBorder: View {
     let rect: CGRect
 
     var body: some View {
-        ZStack {
-            Rectangle()
-                .stroke(Color.white, lineWidth: 1)
-                .frame(width: rect.width, height: rect.height)
-                .position(x: rect.midX, y: rect.midY)
-            Path { path in
-                for corner in cornerHandles(for: rect) {
-                    path.addRect(corner)
-                }
-            }
-            .fill(Color.white)
-        }
-    }
+        Canvas { ctx, _ in
+            // Double-stroked border: dark outline → white fill.
+            // Readable on any background (bright or dark screen content).
+            let border = Path(rect)
+            ctx.stroke(border, with: .color(.black.opacity(0.5)),
+                       style: StrokeStyle(lineWidth: 3))
+            ctx.stroke(border, with: .color(.white),
+                       style: StrokeStyle(lineWidth: 1.5))
 
-    private func cornerHandles(for r: CGRect) -> [CGRect] {
-        let s: CGFloat = 6
-        let inset: CGFloat = -3
-        return [
-            CGRect(x: r.minX + inset, y: r.minY + inset, width: s, height: s),
-            CGRect(x: r.maxX + inset, y: r.minY + inset, width: s, height: s),
-            CGRect(x: r.maxX + inset, y: r.maxY + inset, width: s, height: s),
-            CGRect(x: r.minX + inset, y: r.maxY + inset, width: s, height: s),
-        ]
+            // L-shaped corner brackets — same double-stroke treatment
+            let arm:  CGFloat = 16
+            let corners: [(CGPoint, CGFloat, CGFloat)] = [
+                (CGPoint(x: rect.minX, y: rect.minY),  arm,  arm),   // ↘
+                (CGPoint(x: rect.maxX, y: rect.minY), -arm,  arm),   // ↙
+                (CGPoint(x: rect.minX, y: rect.maxY),  arm, -arm),   // ↗
+                (CGPoint(x: rect.maxX, y: rect.maxY), -arm, -arm),   // ↖
+            ]
+            for (p, dx, dy) in corners {
+                var bracket = Path()
+                bracket.move(to: CGPoint(x: p.x + dx, y: p.y))
+                bracket.addLine(to: p)
+                bracket.addLine(to: CGPoint(x: p.x, y: p.y + dy))
+                ctx.stroke(bracket, with: .color(.black.opacity(0.5)),
+                           style: StrokeStyle(lineWidth: 4.5, lineCap: .square))
+                ctx.stroke(bracket, with: .color(.white),
+                           style: StrokeStyle(lineWidth: 2.5, lineCap: .square))
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 

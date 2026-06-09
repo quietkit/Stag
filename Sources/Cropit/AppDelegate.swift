@@ -42,38 +42,82 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Status Item
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let img = NSImage(systemSymbolName: "viewfinder", accessibilityDescription: "Cropit") {
-            let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
-            statusItem.button?.image = img.withSymbolConfiguration(cfg)
-        }
+        statusItem.button?.image = makeMenuBarIcon()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(showStatusMenu)
         statusItem.button?.toolTip = "Click for capture controls"
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Capture Area", action: #selector(captureArea), keyEquivalent: "5"))
-        menu.addItem(NSMenuItem(title: "Capture Window", action: #selector(captureWindow), keyEquivalent: "4"))
-        menu.addItem(NSMenuItem(title: "Capture Fullscreen", action: #selector(captureFullscreen), keyEquivalent: "3"))
-        menu.addItem(NSMenuItem(title: "Scrolling Capture", action: #selector(captureScrolling), keyEquivalent: "2"))
+        let cs: NSEvent.ModifierFlags = [.command, .shift]
+
+        // ── Screenshot ──────────────────────────────────────────────────────
+        menu.addItem(sectionHeader("SCREENSHOT"))
+        menu.addItem(capture("Capture Area",       #selector(captureArea),       "1", cs))
+        menu.addItem(capture("Capture Window",     #selector(captureWindow),     "2", cs))
+        menu.addItem(capture("Capture Fullscreen", #selector(captureFullscreen), "3", cs))
+        menu.addItem(capture("Scrolling Capture",  #selector(captureScrolling),  "4", cs))
+
+        // ── Record ──────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
-        
-        let recordMenu = NSMenu()
-        recordMenu.addItem(NSMenuItem(title: "Record Screen", action: #selector(captureRecording), keyEquivalent: "6"))
-        recordMenu.addItem(NSMenuItem(title: "Record GIF", action: #selector(captureGIF), keyEquivalent: "7"))
-        let recordItem = NSMenuItem(title: "Record", action: nil, keyEquivalent: "")
-        recordItem.submenu = recordMenu
-        menu.addItem(recordItem)
+        menu.addItem(sectionHeader("RECORD"))
+        menu.addItem(capture("Record Screen", #selector(captureRecording), "5", cs))
+        menu.addItem(capture("Record GIF",    #selector(captureGIF),       "6", cs))
+
+        // ── Tools ───────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Capture History", action: #selector(openHistory), keyEquivalent: "h"))
-        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(sectionHeader("TOOLS"))
+        // OCR has no shortcut — give it an empty equivalent so the column stays aligned
+        menu.addItem(capture("OCR — Scan Text",  #selector(captureOCR),   "", cs))
+        menu.addItem(capture("Capture History",  #selector(openHistory),  "h", .command))
+        menu.addItem(capture("Settings…",        #selector(openSettings), ",", .command))
+
+        // ── App — Quit must have target=nil so it reaches NSApp via responder chain ──
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit Cropit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        
+        let quit = NSMenuItem(title: "Quit Cropit",
+                              action: #selector(NSApplication.terminate(_:)),
+                              keyEquivalent: "q")
+        quit.keyEquivalentModifierMask = .command
+        menu.addItem(quit)
+
         statusItem.menu = menu
     }
 
     @objc private func showStatusMenu() {
         statusItem.button?.performClick(nil)
+    }
+
+    // MARK: - Menu helpers
+
+    /// Disabled label row — uses plain title (not attributedTitle) so NSMenu doesn't
+    /// create a separate layout column for it and shift surrounding items.
+    private func sectionHeader(_ title: String) -> NSMenuItem {
+        if #available(macOS 14.0, *) {
+            return .sectionHeader(title: title)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        // Plain title keeps column widths consistent with regular items
+        item.title = title
+        // Tint via view; attributedTitle would break column alignment
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 10, weight: .semibold)
+        label.textColor = .tertiaryLabelColor
+        label.sizeToFit()
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: label.frame.width + 18, height: 18))
+        label.frame.origin = NSPoint(x: 18, y: 1)
+        container.addSubview(label)
+        item.view = container
+        return item
+    }
+
+    /// Action item — sets target to self so @objc selectors on the delegate are reachable.
+    /// Do NOT use this for NSApplication selectors (terminate:, etc.) — those need target=nil.
+    private func capture(_ title: String, _ action: Selector,
+                         _ key: String, _ mods: NSEvent.ModifierFlags) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.keyEquivalentModifierMask = mods
+        item.target = self
+        return item
     }
 
     // MARK: - Local Monitor (works when app windows are active)
@@ -174,6 +218,65 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
             permissionCheckTimer?.invalidate()
             permissionCheckTimer = nil
         }
+    }
+
+    // MARK: - Menu Bar Icon
+
+    /// Draws a "selection-frame + crosshair" icon — the universal screenshot-tool symbol.
+    /// Rendered as a template image so macOS tints it correctly in every menu-bar style.
+    private func makeMenuBarIcon() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+
+            // Pixel-align for crispness on both 1x and 2x displays
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.setFillColor(NSColor.black.cgColor)
+            ctx.setLineWidth(1.5)
+            ctx.setLineCap(.square)
+
+            let pad: CGFloat  = 1.5   // inset from icon edge
+            let arm: CGFloat  = 4.5   // length of each bracket arm
+            let b = rect.insetBy(dx: pad, dy: pad)
+
+            // Four corner brackets — each is an L-shape
+            let corners: [(CGPoint, CGPoint, CGPoint)] = [
+                // top-left
+                (CGPoint(x: b.minX,        y: b.maxY - arm),
+                 CGPoint(x: b.minX,        y: b.maxY),
+                 CGPoint(x: b.minX + arm,  y: b.maxY)),
+                // top-right
+                (CGPoint(x: b.maxX - arm,  y: b.maxY),
+                 CGPoint(x: b.maxX,        y: b.maxY),
+                 CGPoint(x: b.maxX,        y: b.maxY - arm)),
+                // bottom-right
+                (CGPoint(x: b.maxX,        y: b.minY + arm),
+                 CGPoint(x: b.maxX,        y: b.minY),
+                 CGPoint(x: b.maxX - arm,  y: b.minY)),
+                // bottom-left
+                (CGPoint(x: b.minX + arm,  y: b.minY),
+                 CGPoint(x: b.minX,        y: b.minY),
+                 CGPoint(x: b.minX,        y: b.minY + arm)),
+            ]
+
+            for (a, pivot, c) in corners {
+                ctx.beginPath()
+                ctx.move(to: a)
+                ctx.addLine(to: pivot)
+                ctx.addLine(to: c)
+                ctx.strokePath()
+            }
+
+            // Tiny crosshair dot at centre
+            let dotR: CGFloat = 1.0
+            let cx = rect.midX, cy = rect.midY
+            ctx.fillEllipse(in: CGRect(x: cx - dotR, y: cy - dotR,
+                                       width: dotR * 2, height: dotR * 2))
+
+            return true
+        }
+        image.isTemplate = true   // system tints automatically (dark / light / coloured bar)
+        return image
     }
 
     // MARK: - Carbon Hotkeys (no Accessibility permission required)
@@ -338,6 +441,9 @@ return true
 
     @MainActor
     @objc private func captureAction() { captureManager.startCapture(type: .area) }
+
+    @MainActor
+    @objc private func captureOCR() { captureManager.startOCRCapture() }
 
     @objc private func openHistory() {
         if historyWindow == nil {
