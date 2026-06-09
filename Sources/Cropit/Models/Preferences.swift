@@ -103,6 +103,7 @@ final class Preferences: ObservableObject {
     @Published var jpegQuality: Double = 0.9
     @Published var savePath: String = "~/Desktop/Cropit Screenshots"
     @Published var filePrefix: String = "Cropit_"
+    @Published var useSmartFilenames: Bool = true
     @Published var afterCaptureAction: AfterCaptureAction = .openEditor
     @Published var autoDismissDelay: TimeInterval = 5
     @Published var autoCopyToClipboard = true
@@ -159,6 +160,7 @@ final class Preferences: ObservableObject {
         jpegQuality = decoded.jpegQuality
         savePath = decoded.savePath
         filePrefix = decoded.filePrefix ?? "Cropit_"
+        useSmartFilenames = decoded.useSmartFilenames ?? true
         afterCaptureAction = decoded.afterCaptureAction
         autoDismissDelay = decoded.autoDismissDelay
         autoCopyToClipboard = decoded.autoCopyToClipboard
@@ -194,6 +196,7 @@ final class Preferences: ObservableObject {
             jpegQuality: jpegQuality,
             savePath: savePath,
             filePrefix: filePrefix,
+            useSmartFilenames: useSmartFilenames,
             afterCaptureAction: afterCaptureAction,
             autoDismissDelay: autoDismissDelay,
             autoCopyToClipboard: autoCopyToClipboard,
@@ -231,6 +234,7 @@ final class Preferences: ObservableObject {
         var jpegQuality: Double
         var savePath: String
         var filePrefix: String?          // optional for backward compatibility
+        var useSmartFilenames: Bool?     // optional for backward compatibility
         var afterCaptureAction: AfterCaptureAction
         var autoDismissDelay: TimeInterval
         var autoCopyToClipboard: Bool
