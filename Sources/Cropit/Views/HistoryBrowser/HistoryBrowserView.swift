@@ -142,6 +142,7 @@ struct HistoryBrowserView: View {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(filtered) { record in
                     thumbnailCell(record)
+                        .frame(maxWidth: .infinity)
                         .onTapGesture(count: 2) { openEditor(record) }
                         .onTapGesture { selectedId = record.id }
                         .background(
@@ -175,14 +176,18 @@ struct HistoryBrowserView: View {
                 }
                 .contextMenu { cellContextMenu(record) }
 
-            Text(record.date.formatted(date: .abbreviated, time: .shortened))
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
 
-            Text("\(record.imageWidth) × \(record.imageHeight)")
-                .font(.system(size: 9))
-                .foregroundColor(.secondary.opacity(0.6))
+                Text("\(record.imageWidth) × \(record.imageHeight)")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary.opacity(0.6))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
