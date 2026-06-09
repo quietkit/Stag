@@ -8,6 +8,7 @@ struct SelectionOverlayView: View {
     let onCancel: () -> Void
     var dimOverlay: Bool = true   // false = Shottr "no-overlay" mode (transparent background)
     var showMagnifier: Bool = true
+    var detectedWindows: [WindowHit] = []
 
     @State private var dragStart: CGPoint?
     @State private var dragCurrent: CGPoint?
@@ -15,6 +16,12 @@ struct SelectionOverlayView: View {
     @State private var hovering = false
     @State private var mouseLocation: CGPoint = .zero
     @State private var hexColor: String?
+    @State private var highlightedWindow: WindowHit?
+
+    /// Topmost detected window under a point (list is front-to-back).
+    private func windowHit(at p: CGPoint) -> WindowHit? {
+        detectedWindows.first { $0.rect.contains(p) }
+    }
 
     private var selectionRect: CGRect? {
         guard let s = dragStart, let c = dragCurrent else { return nil }
@@ -31,6 +38,7 @@ struct SelectionOverlayView: View {
                 // even in no-dim mode where all other layers are transparent.
                 Color.white.opacity(0.001)
                 dimmingOverlay
+                windowHighlight
                 crosshairGuides
                 selectionOverlay
                 magnifierOverlay
@@ -42,8 +50,10 @@ struct SelectionOverlayView: View {
                 case .active(let p):
                     mouseLocation = p
                     hovering = true
+                    if !isDragging { highlightedWindow = windowHit(at: p) }
                 case .ended:
                     hovering = false
+                    highlightedWindow = nil
                 }
             }
         }
@@ -77,6 +87,37 @@ struct SelectionOverlayView: View {
             // Pre-drag, dim-on: a soft veil so the cursor/loupe read clearly.
             Color.black.opacity(0.28)
                 .allowsHitTesting(false)
+        }
+    }
+
+    // Highlight the window under the cursor before a drag begins. Click captures it.
+    @ViewBuilder
+    private var windowHighlight: some View {
+        if !isDragging, let win = highlightedWindow {
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.accentColor.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color.accentColor, lineWidth: 2)
+                    )
+                    .frame(width: win.rect.width, height: win.rect.height)
+                    .position(x: win.rect.midX, y: win.rect.midY)
+
+                if !win.title.isEmpty {
+                    Text(win.title)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color.accentColor)
+                        .clipShape(Capsule())
+                        .position(x: win.rect.midX,
+                                  y: max(win.rect.minY + 14, 14))
+                }
+            }
+            .allowsHitTesting(false)
+            .transition(.opacity)
         }
     }
 
@@ -149,8 +190,13 @@ struct SelectionOverlayView: View {
                 }
                 dragCurrent = value.location
                 mouseLocation = value.location
+                // Past a few points of movement it's a freeform drag, not a click —
+                // drop the window highlight so the two modes don't fight.
+                let moved = hypot(value.translation.width, value.translation.height)
+                if moved > 6 { highlightedWindow = nil }
             }
             .onEnded { value in
+                defer { isDragging = false }
                 guard let start = dragStart else { return }
                 let end = value.location
                 let rect = CGRect(
@@ -158,12 +204,21 @@ struct SelectionOverlayView: View {
                     width: abs(end.x - start.x), height: abs(end.y - start.y)
                 )
                 if rect.width > 3 && rect.height > 3 {
-                    onCapture(rect)
+                    onCapture(rect)                       // freeform area
+                } else if let win = windowHit(at: end) {
+                    onCapture(win.rect)                    // click → capture that window
                 } else {
                     onCancel()
                 }
             }
     }
+}
+
+/// A detected window mapped into the overlay's view coordinate space.
+struct WindowHit: Identifiable {
+    let id = UUID()
+    let rect: CGRect
+    let title: String
 }
 
 /// Thin full-screen crosshair lines that follow the cursor. Double-stroked so
