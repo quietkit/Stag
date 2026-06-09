@@ -10,6 +10,7 @@ struct Annotation: Identifiable {
     var color: Color
     var fillColor: Color?
     var lineWidth: CGFloat
+    var lineStyle: LineStyle = .solid  // solid, dashed, or dotted
 
     func contains(point: CGPoint) -> Bool {
         let hitInset: CGFloat = 12
@@ -118,6 +119,26 @@ enum TextStyle: Equatable {
         switch self {
         case .italic, .boldItalic: return .default  // SwiftUI doesn't support italic directly, use NSFont
         default: return nil
+        }
+    }
+}
+
+enum LineStyle: String, Codable, CaseIterable {
+    case solid, dashed, dotted
+
+    var displayName: String {
+        switch self {
+        case .solid: return "Solid"
+        case .dashed: return "Dashed"
+        case .dotted: return "Dotted"
+        }
+    }
+
+    var dashPattern: [CGFloat] {
+        switch self {
+        case .solid: return []
+        case .dashed: return [6, 4]      // 6 pixels on, 4 off
+        case .dotted: return [2, 3]      // 2 pixels on, 3 off
         }
     }
 }
