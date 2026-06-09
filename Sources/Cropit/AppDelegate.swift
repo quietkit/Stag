@@ -65,31 +65,29 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
 
         // ── Screenshot ──────────────────────────────────────────────────────
         menu.addItem(sectionHeader("SCREENSHOT"))
-        menu.addItem(capture("Capture Area",        #selector(captureArea),       "1", cs))
-        menu.addItem(capture("Capture Window",      #selector(captureWindow),     "2", cs))
-        menu.addItem(capture("Capture Fullscreen",  #selector(captureFullscreen), "3", cs))
-        menu.addItem(capture("Scrolling Capture",   #selector(captureScrolling),  "4", cs))
+        menu.addItem(capture("Capture Area",        #selector(captureArea),       "1", []))
+        menu.addItem(capture("Capture Window",      #selector(captureWindow),     "2", []))
+        menu.addItem(capture("Capture Fullscreen",  #selector(captureFullscreen), "3", []))
+        menu.addItem(capture("Scrolling Capture",   #selector(captureScrolling),  "4", []))
 
         // ── Record ──────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
         menu.addItem(sectionHeader("RECORD"))
-        menu.addItem(capture("Record Screen",       #selector(captureRecording), "5", cs))
-        menu.addItem(capture("Record GIF",          #selector(captureGIF),       "6", cs))
+        menu.addItem(capture("Record Screen",       #selector(captureRecording), "5", []))
+        menu.addItem(capture("Record GIF",          #selector(captureGIF),       "6", []))
 
         // ── Tools ───────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
         menu.addItem(sectionHeader("TOOLS"))
-        menu.addItem(capture("Scan Text",         #selector(captureOCR),      "t", .command))
-        menu.addItem(capture("Open Image",       #selector(openImageFile),   "o", .command))
-        menu.addItem(capture("Capture History",   #selector(openHistory),     "h", .command))
-        menu.addItem(capture("Settings",         #selector(openSettings),    ",", .command))
+        menu.addItem(capture("Scan Text",         #selector(captureOCR),      "7", []))
+        menu.addItem(capture("Open Image",       #selector(openImageFile),   "o", []))
+        menu.addItem(capture("Capture History",   #selector(openHistory),     "h", []))
+        menu.addItem(capture("Settings",         #selector(openSettings),    ",", [.command]))
 
         // ── App ─────────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
-        // Use a delegate wrapper instead of NSApp.terminate directly:
-        // in a .accessory app with no key window the responder chain may not
-        // reach NSApplication, causing the item to appear disabled.
-        menu.addItem(capture("Quit Cropit", #selector(quitApp), "q", .command))
+        menu.addItem(capture("Quit Cropit", #selector(quitApp), "q", [.command]))
+
 
         statusItem.menu = menu
     }
