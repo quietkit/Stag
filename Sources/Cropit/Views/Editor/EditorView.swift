@@ -26,6 +26,7 @@ struct EditorView: View {
     @State private var currentColor: Color = .red
     @State private var currentLineWidth: CGFloat = 2
     @State private var currentLineStyle: LineStyle = .solid
+    @State private var currentArrowHeadStyle: ArrowHeadStyle = .standard
     @State private var fillShapes = false
 
     // Color history (last 8 used colors)
@@ -430,7 +431,8 @@ struct EditorView: View {
                     type: previewType(from: s, to: c),
                     color: currentColor,
                     lineWidth: currentLineWidth,
-                    lineStyle: currentLineStyle
+                    lineStyle: currentLineStyle,
+                    arrowHeadStyle: currentArrowHeadStyle
                 )
             }
             renderAnnotation(previewAnnotation, ctx: &ctx, scale: scale, offset: offset, geo: geo, highlight: false)
@@ -448,16 +450,11 @@ struct EditorView: View {
             // Draw main line with line style
             drawStyledLine(from: sa, to: ea, color: annotation.color, lineWidth: annotation.lineWidth, style: annotation.lineStyle, ctx: &ctx)
 
-            // Draw arrow head
+            // Draw arrow head based on style
             let angle = atan2(ea.y - sa.y, ea.x - sa.x)
             let headLen: CGFloat = 12
             let headAngle: CGFloat = .pi / 7
-            var arrow = Path()
-            arrow.move(to: ea)
-            arrow.addLine(to: CGPoint(x: ea.x - headLen * cos(angle - headAngle), y: ea.y - headLen * sin(angle - headAngle)))
-            arrow.move(to: ea)
-            arrow.addLine(to: CGPoint(x: ea.x - headLen * cos(angle + headAngle), y: ea.y - headLen * sin(angle + headAngle)))
-            ctx.stroke(arrow, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+            drawArrowHead(at: ea, angle: angle, length: headLen, style: annotation.arrowHeadStyle, color: annotation.color, lineWidth: annotation.lineWidth, ctx: &ctx)
         case .line(let start, let end):
             let sl = cgApply(start, scale: scale, offset: offset)
             let el = cgApply(end, scale: scale, offset: offset)
@@ -563,13 +560,7 @@ struct EditorView: View {
             ctx.stroke(path, with: .color(annotation.color), lineWidth: annotation.lineWidth)
             let angle = atan2(ea.y - ca.y, ea.x - ca.x)
             let headLen: CGFloat = 12
-            let headAngle: CGFloat = .pi / 7
-            var arrow = Path()
-            arrow.move(to: ea)
-            arrow.addLine(to: CGPoint(x: ea.x - headLen * cos(angle - headAngle), y: ea.y - headLen * sin(angle - headAngle)))
-            arrow.move(to: ea)
-            arrow.addLine(to: CGPoint(x: ea.x - headLen * cos(angle + headAngle), y: ea.y - headLen * sin(angle + headAngle)))
-            ctx.stroke(arrow, with: .color(annotation.color), lineWidth: annotation.lineWidth)
+            drawArrowHead(at: ea, angle: angle, length: headLen, style: annotation.arrowHeadStyle, color: annotation.color, lineWidth: annotation.lineWidth, ctx: &ctx)
         case .smartHighlight(let origin, let size):
             let r = CGRect(origin: origin, size: size).standardized
             let vr = applyRect(r, scale: scale, offset: offset)
@@ -810,7 +801,7 @@ struct EditorView: View {
                     guard r.width > 5 && r.height > 5 else { return }
                     annotations.append(Annotation(type: .blur(origin: r.origin, size: r.size), color: currentColor, fillColor: fc, lineWidth: currentLineWidth))
                 case .arrow:
-                    annotations.append(Annotation(type: .arrow(start: s, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle))
+                    annotations.append(Annotation(type: .arrow(start: s, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle, arrowHeadStyle: currentArrowHeadStyle))
                 case .line:
                     annotations.append(Annotation(type: .line(start: s, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle))
                 case .curvedArrow:
@@ -820,7 +811,7 @@ struct EditorView: View {
                     let perpX = -dy * 0.3
                     let perpY = dx * 0.3
                     let control = CGPoint(x: mid.x + perpX, y: mid.y + perpY)
-                    annotations.append(Annotation(type: .curvedArrow(start: s, control: control, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle))
+                    annotations.append(Annotation(type: .curvedArrow(start: s, control: control, end: pt), color: currentColor, fillColor: fc, lineWidth: currentLineWidth, lineStyle: currentLineStyle, arrowHeadStyle: currentArrowHeadStyle))
                 case .rect:
                     annotations.append(Annotation(type: .rect(origin: s, size: CGSize(width: pt.x - s.x, height: pt.y - s.y)), color: currentColor, fillColor: fc, lineWidth: currentLineWidth))
                 case .circle:
@@ -1166,8 +1157,8 @@ struct EditorView: View {
         HStack(spacing: 8) {
             switch currentTool {
             case .arrow, .line, .curvedArrow:
-                HStack(spacing: 4) {
-                    Text("Style:")
+                HStack(spacing: 6) {
+                    Text("Line:")
                         .font(.system(size: 9))
                         .foregroundColor(.secondary)
                     Picker("", selection: $currentLineStyle) {
@@ -1176,8 +1167,23 @@ struct EditorView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .frame(width: 80)
+                    .frame(width: 70)
                     .controlSize(.small)
+
+                    if currentTool == .arrow || currentTool == .curvedArrow {
+                        Divider().frame(height: 16)
+                        Text("Head:")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $currentArrowHeadStyle) {
+                            ForEach(ArrowHeadStyle.allCases, id: \.self) { style in
+                                Text(style.displayName).tag(style)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 80)
+                        .controlSize(.small)
+                    }
                 }
             case .text:
                 HStack(spacing: 6) {
@@ -1645,6 +1651,39 @@ struct EditorView: View {
         // Keep only last 8
         if colorHistory.count > 8 {
             colorHistory.removeLast()
+        }
+    }
+
+    // MARK: - Arrow Head Drawing
+
+    private func drawArrowHead(at point: CGPoint, angle: CGFloat, length: CGFloat, style: ArrowHeadStyle, color: Color, lineWidth: CGFloat, ctx: inout GraphicsContext) {
+        let headAngle: CGFloat = .pi / 7
+        let p1 = CGPoint(x: point.x - length * cos(angle - headAngle), y: point.y - length * sin(angle - headAngle))
+        let p2 = CGPoint(x: point.x - length * cos(angle + headAngle), y: point.y - length * sin(angle + headAngle))
+
+        switch style {
+        case .standard:
+            // Two lines forming a V
+            var arrow = Path()
+            arrow.move(to: point)
+            arrow.addLine(to: p1)
+            arrow.move(to: point)
+            arrow.addLine(to: p2)
+            ctx.stroke(arrow, with: .color(color), lineWidth: lineWidth)
+
+        case .filled:
+            // Filled triangle
+            var triangle = Path()
+            triangle.move(to: point)
+            triangle.addLine(to: p1)
+            triangle.addLine(to: p2)
+            triangle.closeSubpath()
+            ctx.fill(triangle, with: .color(color))
+
+        case .circle:
+            // Circle at arrow tip
+            let radius = length * 0.4
+            ctx.fill(Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2)), with: .color(color))
         }
     }
 
