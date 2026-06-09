@@ -79,10 +79,10 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
         // ── Tools ───────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
         menu.addItem(sectionHeader("TOOLS"))
-        menu.addItem(capture("OCR — Scan Text",   #selector(captureOCR),      "t", .command))
-        menu.addItem(capture("Open Image…",       #selector(openImageFile),   "o", .command))
+        menu.addItem(capture("Scan Text",         #selector(captureOCR),      "t", .command))
+        menu.addItem(capture("Open Image",       #selector(openImageFile),   "o", .command))
         menu.addItem(capture("Capture History",   #selector(openHistory),     "h", .command))
-        menu.addItem(capture("Settings…",         #selector(openSettings),    ",", .command))
+        menu.addItem(capture("Settings",         #selector(openSettings),    ",", .command))
 
         // ── App ─────────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
@@ -117,11 +117,30 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Action item with target = self so delegate selectors are always reachable.
-    private func capture(_ title: String, _ action: Selector,
-                         _ key: String, _ mods: NSEvent.ModifierFlags) -> NSMenuItem {
+private func capture(_ title: String, _ action: Selector,
+                          _ key: String, _ mods: NSEvent.ModifierFlags) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.keyEquivalentModifierMask = mods
         item.target = self
+        // Assign an SF Symbol icon matching the menu action for visual consistency
+        let symbolName: String?
+        switch title {
+        case "Capture Area": symbolName = "crop"
+        case "Capture Window": symbolName = "macwindow"
+        case "Capture Fullscreen": symbolName = "rectangle.expand.vertical"
+        case "Scrolling Capture": symbolName = "arrow.triangle.2.circlepath"
+        case "Record Screen": symbolName = "record.circle"
+        case "Record GIF": symbolName = "film"
+        case "Scan Text": symbolName = "text.viewfinder"
+        case "Open Image": symbolName = "photo"
+        case "Capture History": symbolName = "clock.arrow.circlepath"
+        case "Settings": symbolName = "gearshape"
+        case "Quit Cropit": symbolName = "xmark.circle"
+        default: symbolName = nil
+        }
+        if let name = symbolName {
+            item.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        }
         return item
     }
 
