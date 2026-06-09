@@ -59,6 +59,7 @@ final class RecordingRectOverlay: NSWindow {
             let screen = NSScreen.screens.first(where: { $0.frame.intersects(screenRect) })
             let displayID = (screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32)
                 ?? CGMainDisplayID()
+            NSCursor.crosshair.pop()
             self.onRectSelected?(screenRect, displayID)
             self.close()
         }
@@ -72,9 +73,11 @@ final class RecordingRectOverlay: NSWindow {
     func show() {
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        NSCursor.crosshair.push()
     }
 
     override func cancelOperation(_ sender: Any?) {
+        NSCursor.crosshair.pop()
         onCancel?()
         close()
     }

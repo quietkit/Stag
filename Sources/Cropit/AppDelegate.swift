@@ -11,6 +11,8 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
     private var localMonitor: Any?
     private var eventTap: CFMachPort?
     private var permissionCheckTimer: Timer?
+    private var permissionCheckAttempts = 0
+    private static let maxPermissionCheckAttempts = 24  // 24 × 5 s = 2 min max
     private var carbonHotkeyRefs: [EventHotKeyRef] = []
     private var carbonEventHandler: EventHandlerRef?
 
@@ -28,7 +30,18 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
         installCarbonHotkeys()   // works without Accessibility permission
         installEventTap()        // also install event tap if Accessibility is granted
         registerURLScheme()
+        createDefaultSaveFolder()
         logger.info("Cropit launched successfully")
+    }
+
+    /// Eagerly creates the default screenshots folder so it shows in Finder from day one.
+    private func createDefaultSaveFolder() {
+        let path = AppStore.shared.preferences.expandedSavePath
+        try? FileManager.default.createDirectory(
+            atPath: path,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -67,17 +80,17 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(sectionHeader("TOOLS"))
         // OCR has no shortcut — give it an empty equivalent so the column stays aligned
-        menu.addItem(capture("OCR — Scan Text",  #selector(captureOCR),   "", cs))
-        menu.addItem(capture("Capture History",  #selector(openHistory),  "h", .command))
-        menu.addItem(capture("Settings…",        #selector(openSettings), ",", .command))
+        menu.addItem(capture("OCR — Scan Text",  #selector(captureOCR),      "", cs))
+        menu.addItem(capture("Open Image…",      #selector(openImageFile),   "o", .command))
+        menu.addItem(capture("Capture History",  #selector(openHistory),     "h", .command))
+        menu.addItem(capture("Settings…",        #selector(openSettings),    ",", .command))
 
-        // ── App — Quit must have target=nil so it reaches NSApp via responder chain ──
+        // ── App ─────────────────────────────────────────────────────────────
         menu.addItem(NSMenuItem.separator())
-        let quit = NSMenuItem(title: "Quit Cropit",
-                              action: #selector(NSApplication.terminate(_:)),
-                              keyEquivalent: "q")
-        quit.keyEquivalentModifierMask = .command
-        menu.addItem(quit)
+        // Use a delegate wrapper instead of NSApp.terminate directly:
+        // in a .accessory app with no key window the responder chain may not
+        // reach NSApplication, causing the item to appear disabled.
+        menu.addItem(capture("Quit Cropit", #selector(quitApp), "q", .command))
 
         statusItem.menu = menu
     }
@@ -88,30 +101,23 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Menu helpers
 
-    /// Disabled label row — uses plain title (not attributedTitle) so NSMenu doesn't
-    /// create a separate layout column for it and shift surrounding items.
+    /// Disabled label row.
+    /// Uses attributedTitle (no item.view) — item.view shifts the NSMenu
+    /// indentation column and makes all subsequent items appear padded.
     private func sectionHeader(_ title: String) -> NSMenuItem {
         if #available(macOS 14.0, *) {
             return .sectionHeader(title: title)
         }
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
-        // Plain title keeps column widths consistent with regular items
-        item.title = title
-        // Tint via view; attributedTitle would break column alignment
-        let label = NSTextField(labelWithString: title)
-        label.font = .systemFont(ofSize: 10, weight: .semibold)
-        label.textColor = .tertiaryLabelColor
-        label.sizeToFit()
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: label.frame.width + 18, height: 18))
-        label.frame.origin = NSPoint(x: 18, y: 1)
-        container.addSubview(label)
-        item.view = container
+        item.attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: NSColor.tertiaryLabelColor,
+        ])
         return item
     }
 
-    /// Action item — sets target to self so @objc selectors on the delegate are reachable.
-    /// Do NOT use this for NSApplication selectors (terminate:, etc.) — those need target=nil.
+    /// Action item with target = self so delegate selectors are always reachable.
     private func capture(_ title: String, _ action: Selector,
                          _ key: String, _ mods: NSEvent.ModifierFlags) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
@@ -195,9 +201,18 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
             if response == .alertFirstButtonReturn {
                 let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
                 NSWorkspace.shared.open(url)
-                // Poll so we auto-activate the tap once the user grants it
+                // Poll so we auto-activate the tap once the user grants it.
+                // Cap at maxPermissionCheckAttempts to avoid running forever.
+                self.permissionCheckAttempts = 0
                 self.permissionCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-                    self?.retryEventTap()
+                    guard let self else { return }
+                    self.permissionCheckAttempts += 1
+                    if self.permissionCheckAttempts >= Self.maxPermissionCheckAttempts {
+                        self.permissionCheckTimer?.invalidate()
+                        self.permissionCheckTimer = nil
+                        return
+                    }
+                    self.retryEventTap()
                 }
             } else {
                 // User chose Later — remember so we never show again until they manually reset
@@ -373,7 +388,7 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.activate(ignoringOtherApps: true)
                 self.captureManager.startCapture(type: type)
             }
-return true
+            return true
         }
         return false
     }
@@ -398,7 +413,30 @@ return true
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
-            handleURL(url)
+            if url.isFileURL {
+                openImageURL(url)
+            } else {
+                handleURL(url)
+            }
+        }
+    }
+
+    @MainActor
+    private func openImageURL(_ url: URL) {
+        guard let image = NSImage(contentsOf: url) else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        EditorWindow(image: image).show()
+    }
+
+    @MainActor
+    @objc private func openImageFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .gif, .tiff, .bmp, .heic, .webP, .image]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose an image to open in the editor"
+        panel.begin { [weak self] resp in
+            guard resp == .OK, let url = panel.url else { return }
+            self?.openImageURL(url)
         }
     }
 
@@ -444,6 +482,8 @@ return true
 
     @MainActor
     @objc private func captureOCR() { captureManager.startOCRCapture() }
+
+    @objc private func quitApp() { NSApplication.shared.terminate(nil) }
 
     @objc private func openHistory() {
         if historyWindow == nil {

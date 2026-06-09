@@ -595,9 +595,6 @@ struct EditorView: View {
         }
 
         if highlight {
-            let hr = highlightRect(annotation: annotation, scale: scale, offset: offset)
-            ctx.stroke(Path(hr), with: .color(.yellow.opacity(0.7)), lineWidth: 1.5)
-
             // Resize handles at corners
             let handles = resizeHandles(for: annotation)
             for h in handles {
@@ -606,71 +603,6 @@ struct EditorView: View {
                 ctx.fill(Path(ellipseIn: dot), with: .color(.white))
                 ctx.stroke(Path(ellipseIn: dot), with: .color(.yellow.opacity(0.8)), lineWidth: 1.5)
             }
-        }
-    }
-
-    private func highlightRect(annotation: Annotation, scale: CGFloat, offset: CGSize) -> CGRect {
-        let h: CGFloat = 8
-        switch annotation.type {
-        case .arrow(let start, let end), .line(let start, let end):
-            var r = CGRect(origin: start, size: CGSize(width: end.x - start.x, height: end.y - start.y)).standardized
-            r = r.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .rect(let origin, let size):
-            let r = CGRect(origin: origin, size: size).standardized.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .circle(let origin, let size):
-            let r = CGRect(origin: origin, size: size).standardized.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .text(let pos, let text, let fontSize):
-            let approx = CGSize(width: CGFloat(text.count) * fontSize * 0.6, height: fontSize * 1.4)
-            let r = CGRect(origin: pos, size: approx).insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .blur(let origin, let size):
-            let r = CGRect(origin: origin, size: size).standardized.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .highlight(let origin, let size):
-            let r = CGRect(origin: origin, size: size).standardized.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .freehand(let points):
-            guard !points.isEmpty else { return .zero }
-            let xs = points.map(\.x); let ys = points.map(\.y)
-            let r = CGRect(x: xs.min()! - h, y: ys.min()! - h, width: xs.max()! - xs.min()! + 2*h, height: ys.max()! - ys.min()! + 2*h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .stepNumber(let center, _):
-            let r = CGRect(origin: center, size: .zero).insetBy(dx: -20 - h, dy: -20 - h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .mosaic(let origin, let size):
-            let r = CGRect(origin: origin, size: size).standardized.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .emoji(let pos, _, let fontSize):
-            let approx = CGSize(width: fontSize * 1.2, height: fontSize * 1.2)
-            let r = CGRect(origin: pos, size: approx).insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .ruler(let start, let end):
-            var r = CGRect(origin: start, size: CGSize(width: end.x - start.x, height: end.y - start.y)).standardized
-            r = r.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .spotlight(let origin, let size):
-            let r = CGRect(origin: origin, size: size).standardized.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .freehandErase:
-            return .zero
-        case .curvedArrow(let start, let control, let end):
-            var pts = [start, end]
-            if control.x < start.x { pts.append(control) }
-            if control.x > end.x { pts.append(control) }
-            let xs = pts.map(\.x); let ys = pts.map(\.y)
-            let r = CGRect(x: xs.min()! - h, y: ys.min()! - h, width: xs.max()! - xs.min()! + 2*h, height: ys.max()! - ys.min()! + 2*h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .smartHighlight(let origin, let size):
-            let r = CGRect(origin: origin, size: size).standardized.insetBy(dx: -h, dy: -h)
-            return applyRect(r, scale: scale, offset: offset)
-        case .magnifierCallout(let center, let calloutPoint, let radius, _):
-            let allX = [center.x - radius, center.x + radius, calloutPoint.x - 60, calloutPoint.x + 60]
-            let allY = [center.y - radius, center.y + radius, calloutPoint.y - 30, calloutPoint.y + 30]
-            let r = CGRect(x: allX.min()! - h, y: allY.min()! - h, width: allX.max()! - allX.min()! + 2*h, height: allY.max()! - allY.min()! + 2*h)
-            return applyRect(r, scale: scale, offset: offset)
         }
     }
 
@@ -1651,7 +1583,7 @@ struct EditorView: View {
     }
 
     private func exportImage() -> NSImage? {
-        let imgSize = image.size
+        let imgSize = workingImage.size
         let angleRad = rotation * .pi / 180
         let cosAngle = abs(cos(angleRad))
         let sinAngle = abs(sin(angleRad))
@@ -1972,7 +1904,7 @@ struct EditorView: View {
     }
 
     private func applyRealBlur(on ctx: CGContext, rect: CGRect, imageSize: NSSize) {
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        guard let cgImage = workingImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         let ciImage = CIImage(cgImage: cgImage)
         // Crop to the blur region first, then apply blur so output extent stays manageable
         let flippedY = imageSize.height - rect.maxY
@@ -1989,7 +1921,7 @@ struct EditorView: View {
     }
 
     private func applyRealMosaic(on ctx: CGContext, rect: CGRect, imageSize: NSSize) {
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        guard let cgImage = workingImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         let ciImage = CIImage(cgImage: cgImage)
         let flippedY = imageSize.height - rect.maxY
         let cropRect = CGRect(x: rect.origin.x, y: flippedY, width: rect.width, height: rect.height)

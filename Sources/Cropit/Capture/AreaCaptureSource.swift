@@ -13,9 +13,10 @@ final class AreaCaptureSource: CaptureSource {
         }
 
         let dimOverlay = store.preferences.dimSelectionOverlay
+        let showMagnifier = store.preferences.showMagnifier
         let image = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGImage, Error>) in
             DispatchQueue.main.async {
-                let overlay = SelectionOverlayWindow(frozenImage: frozenImage, dimOverlay: dimOverlay)
+                let overlay = SelectionOverlayWindow(frozenImage: frozenImage, dimOverlay: dimOverlay, showMagnifier: showMagnifier)
                 overlay.onCapture = { image in
                     continuation.resume(returning: image)
                 }

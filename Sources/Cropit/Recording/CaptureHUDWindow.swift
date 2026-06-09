@@ -39,7 +39,8 @@ final class CaptureHUDWindow: NSWindow {
 
         let size = NSSize(width: 200, height: 44)
         let screen = NSScreen.main ?? NSScreen.screens[0]
-        let origin = CGPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - 80)
+        let vf = screen.visibleFrame
+        let origin = CGPoint(x: vf.midX - size.width / 2, y: vf.maxY - size.height - 8)
 
         hostingView = NSHostingView(rootView: CaptureHUDContentView(state: state))
 

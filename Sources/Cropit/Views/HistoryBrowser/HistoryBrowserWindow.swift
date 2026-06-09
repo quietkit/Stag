@@ -1,7 +1,7 @@
 import Cocoa
 import SwiftUI
 
-final class HistoryBrowserWindow: NSWindow {
+final class HistoryBrowserWindow: NSWindow, NSWindowDelegate {
     private let hostingView: NSHostingView<HistoryBrowserView>
 
     init() {
@@ -25,10 +25,14 @@ final class HistoryBrowserWindow: NSWindow {
         hostingView.frame = NSRect(origin: .zero, size: size)
         hostingView.autoresizingMask = [.width, .height]
         contentView = hostingView
+        delegate = self
     }
 
     func show() {
-        makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowLifecycle.didOpen(self)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        WindowLifecycle.didClose(self)
     }
 }

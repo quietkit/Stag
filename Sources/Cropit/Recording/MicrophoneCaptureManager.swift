@@ -30,6 +30,28 @@ final class MicrophoneCaptureManager: NSObject {
 
     func start() {
         guard !isRunning else { return }
+
+        // Request microphone access before touching the session.
+        // The system shows the permission dialog on first call; subsequent calls
+        // return the cached decision without a dialog.
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            startSession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                guard granted else {
+                    self?.logger.warning("Microphone access denied by user")
+                    return
+                }
+                DispatchQueue.main.async { self?.startSession() }
+            }
+        default:
+            logger.warning("Microphone access not available — skipping mic capture")
+        }
+    }
+
+    private func startSession() {
+        guard !isRunning else { return }
         let device = AVCaptureDevice.DiscoverySession(
             deviceTypes: [AVCaptureDevice.DeviceType.microphone],
             mediaType: .audio,
@@ -69,7 +91,7 @@ final class MicrophoneCaptureManager: NSObject {
 
         isRunning = true
         logger.notice("Microphone capture started")
-    }
+    }  // end of startSession
 
     func stop() {
         guard isRunning else { return }

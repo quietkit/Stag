@@ -13,6 +13,15 @@ enum AfterCaptureAction: String, Codable, CaseIterable {
 
 enum ThumbnailPosition: String, Codable, CaseIterable {
     case bottomRight, bottomLeft, topRight, topLeft
+
+    var displayName: String {
+        switch self {
+        case .bottomRight: return "Bottom Right"
+        case .bottomLeft:  return "Bottom Left"
+        case .topRight:    return "Top Right"
+        case .topLeft:     return "Top Left"
+        }
+    }
 }
 
 enum ThumbnailSize: String, Codable, CaseIterable {
@@ -92,10 +101,11 @@ final class Preferences: ObservableObject {
 
     @Published var defaultFormat: CaptureFormat = .png
     @Published var jpegQuality: Double = 0.9
-    @Published var savePath: String = "~/Desktop"
-    @Published var afterCaptureAction: AfterCaptureAction = .showOverlay
+    @Published var savePath: String = "~/Desktop/Cropit Screenshots"
+    @Published var filePrefix: String = "Cropit_"
+    @Published var afterCaptureAction: AfterCaptureAction = .openEditor
     @Published var autoDismissDelay: TimeInterval = 5
-    @Published var autoCopyToClipboard = false
+    @Published var autoCopyToClipboard = true
     @Published var automaticSave = true
     @Published var thumbnailPosition: ThumbnailPosition = .bottomRight
     @Published var thumbnailSize: ThumbnailSize = .medium
@@ -124,8 +134,8 @@ final class Preferences: ObservableObject {
     @Published var autoDND = false
 
     @Published var windowCaptureShadow: Bool = true
-    /// When false: no floating thumbnail after capture — cursor changes to crosshair and shot is saved/copied immediately
-    @Published var showFloatingThumbnail: Bool = true
+    /// When false: no floating thumbnail after capture — image goes directly to editor / clipboard
+    @Published var showFloatingThumbnail: Bool = false
     /// When false: the selection overlay has no dark dimming — only a crosshair cursor, Shottr-style
     @Published var dimSelectionOverlay: Bool = true
     @Published var hotkeys: [CaptureType: HotKeyCombination] = HotKeyCombination.default()
@@ -148,6 +158,7 @@ final class Preferences: ObservableObject {
         defaultFormat = decoded.defaultFormat
         jpegQuality = decoded.jpegQuality
         savePath = decoded.savePath
+        filePrefix = decoded.filePrefix ?? "Cropit_"
         afterCaptureAction = decoded.afterCaptureAction
         autoDismissDelay = decoded.autoDismissDelay
         autoCopyToClipboard = decoded.autoCopyToClipboard
@@ -182,6 +193,7 @@ final class Preferences: ObservableObject {
             defaultFormat: defaultFormat,
             jpegQuality: jpegQuality,
             savePath: savePath,
+            filePrefix: filePrefix,
             afterCaptureAction: afterCaptureAction,
             autoDismissDelay: autoDismissDelay,
             autoCopyToClipboard: autoCopyToClipboard,
@@ -218,6 +230,7 @@ final class Preferences: ObservableObject {
         var defaultFormat: CaptureFormat
         var jpegQuality: Double
         var savePath: String
+        var filePrefix: String?          // optional for backward compatibility
         var afterCaptureAction: AfterCaptureAction
         var autoDismissDelay: TimeInterval
         var autoCopyToClipboard: Bool
