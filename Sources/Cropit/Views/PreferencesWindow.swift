@@ -54,6 +54,13 @@ private struct PreferencesView: View {
     @ObservedObject var prefs: Preferences
     @State private var selectedTab: SettingsTab = .general
 
+    /// Tabs shown in each mode. Simple keeps the essentials; Advanced shows all.
+    private var visibleTabs: [SettingsTab] {
+        prefs.settingsAdvancedMode
+            ? SettingsTab.allCases
+            : [.general, .capture, .shortcuts]
+    }
+
     enum SettingsTab: String, CaseIterable {
         case general, capture, recording, overlays, shortcuts, advanced
 
@@ -82,13 +89,24 @@ private struct PreferencesView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
-                Label(tab.label, systemImage: tab.icon)
-                    .font(.system(size: 12))
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 4)
+            VStack(spacing: 0) {
+                Picker("", selection: $prefs.settingsAdvancedMode) {
+                    Text("Simple").tag(false)
+                    Text("Advanced").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
+
+                List(visibleTabs, id: \.self, selection: $selectedTab) { tab in
+                    Label(tab.label, systemImage: tab.icon)
+                        .font(.system(size: 12))
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 4)
+                }
+                .listStyle(.sidebar)
             }
-            .listStyle(.sidebar)
             .frame(minWidth: 160, idealWidth: 170, maxWidth: 180)
             .navigationSplitViewColumnWidth(min: 155, ideal: 165, max: 180)
         } detail: {
@@ -97,6 +115,10 @@ private struct PreferencesView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: prefs.settingsAdvancedMode) { _, _ in
+            // If the current tab is hidden by switching to Simple, fall back.
+            if !visibleTabs.contains(selectedTab) { selectedTab = .general }
+        }
         .onDisappear { prefs.save() }
     }
 
