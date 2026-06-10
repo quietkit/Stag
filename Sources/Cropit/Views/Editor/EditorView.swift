@@ -1861,8 +1861,11 @@ struct EditorView: View {
         // If this image came from a capture/history file, save edits back to it
         // (overwrite) and refresh the history thumbnail — no Save panel needed.
         if filePath != nil {
-            saveBackToFile()
-            ToastWindow.show("Saved", icon: "checkmark.circle.fill", iconColor: .green)
+            if saveBackToFile() {
+                ToastWindow.show("Saved", icon: "checkmark.circle.fill", iconColor: .green)
+            } else {
+                ToastWindow.show("Couldn't save", icon: "exclamationmark.triangle.fill", iconColor: .orange)
+            }
             return
         }
         guard let exported = exportImage() else { return }
@@ -1881,21 +1884,36 @@ struct EditorView: View {
     }
 
     /// Writes the edited image back to its source file and updates history.
-    private func saveBackToFile() {
-        guard let path = filePath, let exported = exportImage() else { return }
+    /// Returns whether the file was actually written.
+    @discardableResult
+    private func saveBackToFile() -> Bool {
+        guard let path = filePath else { return false }
+        // Fall back to the raw working image if flattening somehow fails, so we
+        // never silently "succeed" without writing anything.
+        let exported = exportImage() ?? workingImage
         let url = URL(fileURLWithPath: path)
+
         let lower = path.lowercased()
+        let data: Data?
         if lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg") {
             let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: 0.9]
-            if let tiff = exported.tiffRepresentation,
-               let bm = NSBitmapImageRep(data: tiff),
-               let data = bm.representation(using: .jpeg, properties: props) {
-                try? data.write(to: url)
-            }
+            if let tiff = exported.tiffRepresentation, let bm = NSBitmapImageRep(data: tiff) {
+                data = bm.representation(using: .jpeg, properties: props)
+            } else { data = nil }
         } else {
-            exported.pngWrite(to: url)
+            data = exported.pngData
+        }
+        guard let data else { return false }
+
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            return false
         }
         AppStore.shared.history.updateEditedImage(filePath: path, image: exported)
+        return true
     }
 
     /// Final exported image: the flattened annotated screenshot, wrapped in the
