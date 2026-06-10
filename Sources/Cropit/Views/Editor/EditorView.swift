@@ -1951,7 +1951,10 @@ struct EditorView: View {
         workingImage.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1)
 
         for annotation in annotations {
-            ctx.setStrokeColor(annotation.color.cgColor ?? CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+            // SwiftUI Color.cgColor is nil for standard colors (.red etc.), which
+            // made every annotation export as the white fallback. NSColor(_:).cgColor
+            // converts reliably.
+            ctx.setStrokeColor(NSColor(annotation.color).cgColor)
             ctx.setLineWidth(annotation.lineWidth)
 
             switch annotation.type {
@@ -1964,14 +1967,14 @@ struct EditorView: View {
             case .rect(let origin, let size):
                 let rr = CGRect(origin: origin, size: size).standardized
                 if let fc = annotation.fillColor {
-                    ctx.setFillColor(fc.cgColor ?? CGColor(red: 0, green: 0, blue: 1, alpha: 0.25))
+                    ctx.setFillColor(NSColor(fc).cgColor)
                     ctx.fill(rr)
                 }
                 ctx.stroke(rr)
             case .circle(let origin, let size):
                 let ce = CGRect(origin: origin, size: size).standardized
                 if let fc = annotation.fillColor {
-                    ctx.setFillColor(fc.cgColor ?? CGColor(red: 0, green: 0, blue: 1, alpha: 0.25))
+                    ctx.setFillColor(NSColor(fc).cgColor)
                     ctx.fillEllipse(in: ce)
                 }
                 ctx.strokeEllipse(in: ce)
@@ -1987,7 +1990,7 @@ struct EditorView: View {
             case .blur(let origin, let size):
                 applyRealBlur(on: ctx, rect: CGRect(origin: origin, size: size).standardized, imageSize: imgSize)
             case .highlight(let origin, let size):
-                ctx.setFillColor((annotation.color.cgColor ?? CGColor(red: 1, green: 1, blue: 0, alpha: 1)).copy(alpha: 0.3)!)
+                ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.3)!)
                 ctx.fill(CGRect(origin: origin, size: size).standardized)
             case .freehand(let points):
                 guard points.count > 1 else { break }
@@ -1998,7 +2001,7 @@ struct EditorView: View {
                 ctx.strokePath()
             case .stepNumber(let center, let number):
                 let r = CGRect(origin: center, size: .zero).insetBy(dx: -16, dy: -16)
-                ctx.setFillColor(annotation.color.cgColor ?? CGColor(red: 0, green: 0.5, blue: 1, alpha: 1))
+                ctx.setFillColor(NSColor(annotation.color).cgColor)
                 ctx.fillEllipse(in: r)
                 let text = "\(number)"
                 let attrs: [NSAttributedString.Key: Any] = [
@@ -2035,19 +2038,19 @@ struct EditorView: View {
                 ctx.strokePath()
             case .smartHighlight(let origin, let size):
                 let r = CGRect(origin: origin, size: size).standardized
-                ctx.setFillColor((annotation.color.cgColor ?? CGColor(red: 1, green: 1, blue: 0, alpha: 1)).copy(alpha: 0.3)!)
+                ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.3)!)
                 ctx.fill(r)
-                ctx.setStrokeColor(annotation.color.cgColor ?? CGColor(red: 1, green: 1, blue: 0, alpha: 1))
+                ctx.setStrokeColor(NSColor(annotation.color).cgColor)
                 ctx.setLineWidth(2)
                 ctx.strokeLineSegments(between: [CGPoint(x: r.minX, y: r.maxY), CGPoint(x: r.maxX, y: r.maxY)])
             case .magnifierCallout(let center, let calloutPoint, let radius, let magScale):
                 let r = radius
-                ctx.setStrokeColor(annotation.color.cgColor ?? CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+                ctx.setStrokeColor(NSColor(annotation.color).cgColor)
                 ctx.setLineWidth(2)
                 ctx.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r*2, height: r*2))
                 ctx.strokeLineSegments(between: [center, calloutPoint])
                 let bubbleRect = CGRect(x: calloutPoint.x - 50, y: calloutPoint.y - 15, width: 100, height: 30)
-                ctx.setFillColor((annotation.color.cgColor ?? CGColor(red: 1, green: 1, blue: 1, alpha: 1)).copy(alpha: 0.2)!)
+                ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.2)!)
                 ctx.fill(bubbleRect)
                 let text = "\(Int(magScale))x" as NSString
                 text.draw(at: CGPoint(x: calloutPoint.x - 25, y: calloutPoint.y - 10), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(annotation.color)])
