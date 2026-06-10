@@ -60,9 +60,11 @@ struct SelectionOverlayView: View {
         .edgesIgnoringSafeArea(.all)
     }
 
-    // Shottr-correct dimming: the SELECTION is always crisp. We only ever dim the
-    // surroundings. "dim off" keeps the screen fully visible and lets the bright
-    // border do the work; "dim on" darkens everything outside the selection.
+    // Two distinct modes:
+    //  • dim ON  → darken everything OUTSIDE the selection (selection stays crisp),
+    //              with crosshair guides + loupe (the rich mode).
+    //  • dim OFF → minimal: leave the screen bright and lightly dim the SELECTION
+    //              itself; no guides, no loupe.
     @ViewBuilder
     private var dimmingOverlay: some View {
         let fullSize = CGSize(width: screenFrame.width, height: screenFrame.height)
@@ -76,13 +78,22 @@ struct SelectionOverlayView: View {
         }
 
         if let rect = selectionRect, isDragging {
-            // During drag: dim everything except the selection (even-odd cut-out).
-            Path { p in
-                p.addRect(CGRect(origin: .zero, size: fullSize))
-                p.addRect(rect)
+            if dimOverlay {
+                // Dim everything except the selection (even-odd cut-out).
+                Path { p in
+                    p.addRect(CGRect(origin: .zero, size: fullSize))
+                    p.addRect(rect)
+                }
+                .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
+                .allowsHitTesting(false)
+            } else {
+                // Minimal: lightly dim the selected region; surroundings stay bright.
+                Rectangle()
+                    .fill(Color.black.opacity(0.20))
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+                    .allowsHitTesting(false)
             }
-            .fill(Color.black.opacity(dimOverlay ? 0.45 : 0.12), style: FillStyle(eoFill: true))
-            .allowsHitTesting(false)
         } else if dimOverlay {
             // Pre-drag, dim-on: a soft veil so the cursor/loupe read clearly.
             Color.black.opacity(0.28)
@@ -121,10 +132,10 @@ struct SelectionOverlayView: View {
         }
     }
 
-    // Full-screen alignment guides that track the cursor (Shottr-style).
+    // Full-screen alignment guides — only in the rich (dim-on) mode.
     @ViewBuilder
     private var crosshairGuides: some View {
-        if (hovering || isDragging) {
+        if dimOverlay && (hovering || isDragging) {
             CrosshairGuides(at: mouseLocation,
                             size: CGSize(width: screenFrame.width, height: screenFrame.height))
         }
@@ -133,18 +144,29 @@ struct SelectionOverlayView: View {
     @ViewBuilder
     private var selectionOverlay: some View {
         if let rect = selectionRect, isDragging {
-            SelectionRectBorder(rect: rect)
-            DimensionLabel(
-                size: CGSize(width: rect.width, height: rect.height),
-                rect: rect,
-                bounds: CGSize(width: screenFrame.width, height: screenFrame.height)
-            )
+            if dimOverlay {
+                SelectionRectBorder(rect: rect)
+                DimensionLabel(
+                    size: CGSize(width: rect.width, height: rect.height),
+                    rect: rect,
+                    bounds: CGSize(width: screenFrame.width, height: screenFrame.height)
+                )
+            } else {
+                // Minimal mode: thin border + a small size readout near the cursor.
+                MinimalSelectionBorder(rect: rect)
+                MinimalSizeLabel(
+                    size: CGSize(width: rect.width, height: rect.height),
+                    at: mouseLocation,
+                    bounds: CGSize(width: screenFrame.width, height: screenFrame.height)
+                )
+            }
         }
     }
 
     @ViewBuilder
     private var magnifierOverlay: some View {
-        if showMagnifier && (hovering || isDragging) {
+        // The loupe belongs to the rich (dim-on) mode only.
+        if dimOverlay && showMagnifier && (hovering || isDragging) {
             let block = magnifierPlacement()
             VStack(spacing: 6) {
                 MagnifierView(
@@ -211,6 +233,38 @@ struct SelectionOverlayView: View {
                     onCancel()
                 }
             }
+    }
+}
+
+/// Thin selection outline for minimal (dim-off) mode — no corner brackets.
+/// Double-stroked so it reads on both light and dark backgrounds.
+struct MinimalSelectionBorder: View {
+    let rect: CGRect
+    var body: some View {
+        Canvas { ctx, _ in
+            let p = Path(rect)
+            ctx.stroke(p, with: .color(.black.opacity(0.45)), style: StrokeStyle(lineWidth: 1.5))
+            ctx.stroke(p, with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: 0.75))
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Small W×H readout that follows the cursor in minimal mode, clamped on-screen.
+struct MinimalSizeLabel: View {
+    let size: CGSize
+    let at: CGPoint
+    let bounds: CGSize
+    var body: some View {
+        Text("\(Int(size.width)) × \(Int(size.height))")
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundColor(.white)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(Color.black.opacity(0.6))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .position(x: min(at.x + 42, bounds.width - 36),
+                      y: min(at.y + 24, bounds.height - 14))
+            .allowsHitTesting(false)
     }
 }
 
