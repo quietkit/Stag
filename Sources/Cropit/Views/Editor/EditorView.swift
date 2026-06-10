@@ -63,7 +63,9 @@ struct EditorView: View {
     // Upload state
     @State private var uploading = false
     @State private var zoomScale: CGFloat = 1.0
+    @State private var lastZoom: CGFloat = 1.0      // pinch anchor
     @State private var panOffset: CGSize = .zero
+    @State private var scrollMonitor: Any? = nil
 
     // Backdrop
     @State private var backdrop = BackdropStyle()
@@ -116,10 +118,38 @@ struct EditorView: View {
             footer
         }
         .frame(minWidth: 400, minHeight: 300)
-        .onAppear(perform: installKeyboardMonitor)
+        .onAppear { installKeyboardMonitor(); installScrollMonitor() }
         .onDisappear {
             if let mon = keyboardMonitor { NSEvent.removeMonitor(mon) }
+            if let mon = scrollMonitor { NSEvent.removeMonitor(mon) }
             keyboardMonitor = nil
+            scrollMonitor = nil
+        }
+    }
+
+    /// Trackpad/mouse-wheel scrolling: pans the image when zoomed in, and
+    /// ⌘-scroll zooms. Without this, panOffset never changed, so a zoomed-in
+    /// image could not be navigated at all.
+    private func installScrollMonitor() {
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard window.isKeyWindow else { return event }
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            if mods.contains(.command) {
+                guard event.scrollingDeltaY != 0 else { return nil }
+                let factor = 1 + (event.scrollingDeltaY * 0.005)
+                zoomScale = min(maxZoom, max(minZoom, zoomScale * factor))
+                lastZoom = zoomScale
+                clampPan()
+                return nil
+            }
+
+            // Pan only when zoomed in; otherwise let the event through so panels scroll.
+            guard zoomScale > 1.0 else { return event }
+            panOffset.width += event.scrollingDeltaX
+            panOffset.height += event.scrollingDeltaY
+            clampPan()
+            return nil
         }
     }
 
@@ -206,9 +236,14 @@ struct EditorView: View {
             .gesture(canvasDragGesture(geo: geo))
             .gesture(
                 MagnificationGesture()
-                    .onChanged { scale in
-                        let newZoom = zoomScale * scale.magnitude
-                        zoomScale = min(maxZoom, max(minZoom, newZoom))
+                    .onChanged { value in
+                        // value.magnitude is cumulative (1.0 at start); anchor to the
+                        // zoom captured when the pinch began so it doesn't compound.
+                        zoomScale = min(maxZoom, max(minZoom, lastZoom * value.magnitude))
+                    }
+                    .onEnded { value in
+                        lastZoom = min(maxZoom, max(minZoom, lastZoom * value.magnitude))
+                        zoomScale = lastZoom
                     }
             )
             .onContinuousHover { phase in
@@ -1142,15 +1177,27 @@ struct EditorView: View {
 
     private func zoomIn() {
         zoomScale = min(maxZoom, zoomScale * 1.25)
+        lastZoom = zoomScale
     }
 
     private func zoomOut() {
         zoomScale = max(minZoom, zoomScale / 1.25)
+        lastZoom = zoomScale
+        clampPan()
     }
 
     private func resetZoom() {
         zoomScale = 1.0
+        lastZoom = 1.0
         panOffset = .zero
+    }
+
+    /// Keep the panned image from being dragged entirely off-screen.
+    private func clampPan() {
+        guard zoomScale > 1.0 else { panOffset = .zero; return }
+        let limit = max(workingImage.size.width, workingImage.size.height) * zoomScale
+        panOffset.width = min(max(panOffset.width, -limit), limit)
+        panOffset.height = min(max(panOffset.height, -limit), limit)
     }
 
     private func rotate(_ degrees: CGFloat) {
