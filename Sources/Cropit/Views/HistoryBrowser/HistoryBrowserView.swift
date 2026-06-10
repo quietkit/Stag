@@ -195,7 +195,10 @@ struct HistoryBrowserView: View {
         .animation(.easeInOut(duration: 0.12), value: isHovered)
         .onHover { hovering in
             hoveredId = hovering ? record.id : (hoveredId == record.id ? nil : hoveredId)
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            // set() (not push/pop) — can't leak an unbalanced cursor stack when a
+            // hovered cell is recycled out of the lazy grid mid-scroll.
+            if hovering { NSCursor.pointingHand.set() }
+            else if hoveredId == nil { NSCursor.arrow.set() }
         }
         .help("Double-click to open in editor")
         .contextMenu { cellContextMenu(record) }
