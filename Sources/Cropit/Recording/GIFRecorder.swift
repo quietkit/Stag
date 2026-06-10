@@ -28,7 +28,9 @@ final class GIFRecorder: NSObject, CaptureRecorder, ObservableObject, @unchecked
     func startCapture(filter: SCContentFilter, config: RecordingConfig, outputURL url: URL) async throws {
         guard case .idle = recorderState else { throw CaptureError.captureFailed(reason: "GIF recorder already active") }
         outputURL = url
-        fps = max(1, min(config.fps, 50))
+        // GIFs are impractical above ~30fps (huge files, many viewers cap delay);
+        // the High recording preset is 60fps, so clamp here.
+        fps = max(1, min(config.fps, 30))
         frameIndex = 0
 
         tempDir = FileManager.default.temporaryDirectory
@@ -109,8 +111,10 @@ final class GIFRecorder: NSObject, CaptureRecorder, ObservableObject, @unchecked
                   let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
             else { continue }
-            let dithered = applyFloydSteinberg(image)
-            CGImageDestinationAddImage(destination, dithered, frameProperties as CFDictionary)
+            // Let ImageIO build an adaptive 256-color palette per frame. This is
+            // far faster (no per-pixel Swift loop over hundreds of frames) AND
+            // higher quality than the old fixed 216-color Floyd–Steinberg dither.
+            CGImageDestinationAddImage(destination, image, frameProperties as CFDictionary)
         }
 
         CGImageDestinationFinalize(destination)
@@ -123,76 +127,6 @@ final class GIFRecorder: NSObject, CaptureRecorder, ObservableObject, @unchecked
             handle.write(Data([0x39]))  // '9' — turns "GIF87a" → "GIF89a"
             try? handle.close()
         }
-    }
-
-    private func applyFloydSteinberg(_ image: CGImage) -> CGImage {
-        let w = image.width
-        let h = image.height
-
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-        let bitmapInfo = CGBitmapInfo(
-            rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGImageByteOrderInfo.order32Big.rawValue
-        )
-        guard let ctx = CGContext(
-            data: nil, width: w, height: h,
-            bitsPerComponent: 8, bytesPerRow: w * 4,
-            space: colorSpace, bitmapInfo: bitmapInfo.rawValue
-        ),
-            let data = ctx.data
-        else { return image }
-
-        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
-
-        let pixels = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
-
-        for y in 0..<h {
-            for x in 0..<w {
-                let offset = (y * w + x) * 4
-
-                let oldR = pixels[offset + 1]
-                let oldG = pixels[offset + 2]
-                let oldB = pixels[offset + 3]
-
-                let newR = quantize6(oldR)
-                let newG = quantize6(oldG)
-                let newB = quantize6(oldB)
-
-                pixels[offset + 1] = newR
-                pixels[offset + 2] = newG
-                pixels[offset + 3] = newB
-
-                let errR = Int(oldR) - Int(newR)
-                let errG = Int(oldG) - Int(newG)
-                let errB = Int(oldB) - Int(newB)
-
-                distribute(pixels, w: w, h: h, x: x + 1, y: y, dr: errR * 7 / 16, dg: errG * 7 / 16, db: errB * 7 / 16)
-                distribute(pixels, w: w, h: h, x: x - 1, y: y + 1, dr: errR * 3 / 16, dg: errG * 3 / 16, db: errB * 3 / 16)
-                distribute(pixels, w: w, h: h, x: x, y: y + 1, dr: errR * 5 / 16, dg: errG * 5 / 16, db: errB * 5 / 16)
-                distribute(pixels, w: w, h: h, x: x + 1, y: y + 1, dr: errR * 1 / 16, dg: errG * 1 / 16, db: errB * 1 / 16)
-            }
-        }
-
-        return ctx.makeImage() ?? image
-    }
-
-    private func quantize6(_ value: UInt8) -> UInt8 {
-        let v = Int(value)
-        return UInt8((v + 25) / 51 * 51)
-    }
-
-    private func distribute(_ pixels: UnsafeMutablePointer<UInt8>, w: Int, h: Int, x: Int, y: Int, dr: Int, dg: Int, db: Int) {
-        guard x >= 0, x < w, y >= 0, y < h else { return }
-        let offset = (y * w + x) * 4
-        pixels[offset + 1] = clamp(pixels[offset + 1], dr)
-        pixels[offset + 2] = clamp(pixels[offset + 2], dg)
-        pixels[offset + 3] = clamp(pixels[offset + 3], db)
-    }
-
-    private func clamp(_ value: UInt8, _ delta: Int) -> UInt8 {
-        let result = Int(value) + delta
-        return UInt8(min(255, max(0, result)))
     }
 
     private func resizeIfNeeded(_ image: CGImage) -> CGImage {

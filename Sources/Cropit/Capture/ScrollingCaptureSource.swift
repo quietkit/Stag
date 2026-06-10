@@ -52,44 +52,45 @@ final class ScrollingCaptureSource: CaptureSource {
         let firstImage = try await captureWindowImage(windowID: windowID)
         var frames: [(image: CGImage, rect: CGRect)] = [(firstImage, windowRect)]
 
-        // Try scrolling via CGEvent simulation
+        // Scroll the window down a page at a time, capturing as we go.
         let visibleHeight = windowRect.height
+        let pageScroll = max(40, Int(visibleHeight * 0.85))   // overlap so stitching can align
         var scrollAttempts = 0
-        let maxScrollAttempts = 30
+        let maxScrollAttempts = 40
         var lastImage = firstImage
         var hasMoreContent = true
 
         while hasMoreContent && scrollAttempts < maxScrollAttempts {
             scrollAttempts += 1
 
-            // Scroll down by visibleHeight
-            scrollWindow(pid: windowPID, lines: Int32(visibleHeight / 10))
-            try await Task.sleep(nanoseconds: 300_000_000)
+            scrollWindow(pid: windowPID, pixels: pageScroll)
+            try await Task.sleep(nanoseconds: 350_000_000)
 
             let newImage = try await captureWindowImage(windowID: windowID)
-            let newData = newImage.dataProvider?.data
-            let lastData = lastImage.dataProvider?.data
 
-            // If the image hasn't changed, we've reached the bottom
-            if let newData, let lastData, CFDataGetLength(newData) == CFDataGetLength(lastData) {
-                let newBytes = CFDataGetBytePtr(newData)
-                let lastBytes = CFDataGetBytePtr(lastData)
-                if memcmp(newBytes, lastBytes, CFDataGetLength(newData)) == 0 {
-                    hasMoreContent = false
-                    break
-                }
+            // If the frame is identical to the previous one, we've hit the bottom.
+            if imagesEqual(newImage, lastImage) {
+                hasMoreContent = false
+                break
             }
 
             frames.append((newImage, windowRect))
             lastImage = newImage
         }
 
-        // Scroll back to top
+        // Scroll back to the top so we leave the window as we found it.
         for _ in 0..<scrollAttempts {
-            scrollWindow(pid: windowPID, lines: Int32(-Int(visibleHeight / 10)))
+            scrollWindow(pid: windowPID, pixels: -pageScroll)
         }
 
-        return try stitchFrames(frames, visibleHeight: visibleHeight)
+        return try stitchWithOverlap(frames.map { $0.image })
+    }
+
+    private func imagesEqual(_ a: CGImage, _ b: CGImage) -> Bool {
+        guard a.width == b.width, a.height == b.height,
+              let da = a.dataProvider?.data, let db = b.dataProvider?.data,
+              CFDataGetLength(da) == CFDataGetLength(db) else { return false }
+        return memcmp(CFDataGetBytePtr(da), CFDataGetBytePtr(db), CFDataGetLength(da)) == 0
     }
 
     private struct WindowInfo {
@@ -113,10 +114,13 @@ final class ScrollingCaptureSource: CaptureSource {
         return nil
     }
 
-    private func scrollWindow(pid: pid_t, lines: Int32) {
+    private func scrollWindow(pid: pid_t, pixels: Int) {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return }
         app.activate(options: .activateIgnoringOtherApps)
-        let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: lines, wheel2: 0, wheel3: 0)
+        // Pixel units give a predictable, overlap-friendly scroll distance.
+        // Negative wheel1 advances content downward (page-down).
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+                            wheelCount: 1, wheel1: Int32(-pixels), wheel2: 0, wheel3: 0)
         event?.post(tap: .cghidEventTap)
     }
 
@@ -133,36 +137,111 @@ final class ScrollingCaptureSource: CaptureSource {
         return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
 
-    private func stitchFrames(_ frames: [(image: CGImage, rect: CGRect)], visibleHeight: CGFloat) throws -> CGImage {
-        guard !frames.isEmpty else { throw CaptureError.captureFailed(reason: "No frames captured") }
+    // MARK: - Overlap-aware stitching
 
-        let totalHeight: Int = frames.reduce(0) { $0 + $1.image.height }
-        let width: Int = frames[0].image.width
+    /// Stitches scroll frames by detecting how many pixels actually scrolled
+    /// between consecutive frames and appending only the *new* rows. Naive
+    /// concatenation duplicated the overlapping content into a giant garbled image.
+    private func stitchWithOverlap(_ images: [CGImage]) throws -> CGImage {
+        guard let first = images.first else {
+            throw CaptureError.captureFailed(reason: "No frames captured")
+        }
+        let width = first.width
+        let maxOutputHeight = 30_000   // safety cap
+
+        // Each piece = a sub-rect (top-down y) of a source image to append.
+        var pieces: [(img: CGImage, srcY: Int, height: Int)] = [(first, 0, first.height)]
+        var totalHeight = first.height
+        var prevHashes = rowHashes(first)
+
+        for img in images.dropFirst() {
+            guard img.width == width else { continue }
+            let curHashes = rowHashes(img)
+            let newRows = newContentRows(prev: prevHashes, cur: curHashes)
+            prevHashes = curHashes
+            // newRows <= 0 means we couldn't detect forward scroll — stop rather
+            // than risk duplicating a full frame.
+            guard newRows > 2 else { break }
+            let h = min(newRows, img.height)
+            pieces.append((img, img.height - h, h))
+            totalHeight += h
+            if totalHeight >= maxOutputHeight { break }
+        }
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        guard let ctx = CGContext(
-            data: nil,
-            width: width,
-            height: totalHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo
-        ) else {
+        guard let ctx = CGContext(data: nil, width: width, height: totalHeight,
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: colorSpace, bitmapInfo: bitmapInfo) else {
             throw CaptureError.captureFailed(reason: "Failed to create stitching context")
         }
 
-        var yOffset: CGFloat = 0
-        for (image, _) in frames {
-            ctx.draw(image, in: CGRect(x: 0, y: yOffset, width: CGFloat(image.width), height: CGFloat(image.height)))
-            yOffset += CGFloat(image.height)
+        var yTop = 0
+        for p in pieces {
+            let region = CGRect(x: 0, y: p.srcY, width: width, height: p.height)
+            guard let crop = p.img.cropping(to: region) else { continue }
+            // CGContext is bottom-up; place this piece at output row `yTop`.
+            let drawY = totalHeight - yTop - p.height
+            ctx.draw(crop, in: CGRect(x: 0, y: drawY, width: width, height: p.height))
+            yTop += p.height
         }
 
         guard let result = ctx.makeImage() else {
             throw CaptureError.captureFailed(reason: "Failed to stitch images")
         }
         return result
+    }
+
+    /// Per-row signature (top-to-bottom) sampled across columns, for alignment.
+    private func rowHashes(_ image: CGImage) -> [UInt64] {
+        let w = image.width, h = image.height
+        guard w > 0, h > 0 else { return [] }
+        let bytesPerRow = w * 4
+        var buf = [UInt8](repeating: 0, count: bytesPerRow * h)
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = buf.withUnsafeMutableBytes({ ptr in
+            CGContext(data: ptr.baseAddress, width: w, height: h, bitsPerComponent: 8,
+                      bytesPerRow: bytesPerRow, space: cs,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        }) else { return [] }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+
+        let stride = max(1, w / 48) * 4   // sample ~48 columns
+        var hashes = [UInt64](repeating: 0, count: h)
+        for row in 0..<h {
+            var hsh: UInt64 = 1469598103934665603
+            let base = row * bytesPerRow
+            var x = 0
+            while x < bytesPerRow {
+                let lum = UInt64(buf[base + x]) &+ UInt64(buf[base + x + 1]) &+ UInt64(buf[base + x + 2])
+                hsh = (hsh ^ (lum >> 2)) &* 1099511628211
+                x += stride
+            }
+            // Buffer is bottom-up; convert to top-down index.
+            hashes[h - 1 - row] = hsh
+        }
+        return hashes
+    }
+
+    /// Number of new rows at the bottom of `cur` versus `prev` (the scroll delta).
+    /// Returns 0 if no confident forward overlap is found.
+    private func newContentRows(prev: [UInt64], cur: [UInt64]) -> Int {
+        let h = min(prev.count, cur.count)
+        guard h > 16 else { return 0 }
+        let minRun = max(12, h / 5)
+        var bestD = 0
+        var bestScore = 0
+        for d in 1..<h {
+            let n = h - d
+            var score = 0
+            var y = 0
+            while y < n {
+                if cur[y] == prev[y + d] { score += 1 }
+                y += 1
+            }
+            if score > bestScore { bestScore = score; bestD = d }
+        }
+        return bestScore >= minRun ? bestD : 0
     }
 }
 
