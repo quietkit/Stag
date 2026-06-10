@@ -220,8 +220,12 @@ final class CaptureManager {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([nsImage])
         case .openEditor:
-            if prefs.automaticSave { saveImage(nsImage, type: type, addToHistory: true) }
-            openEditor(with: nsImage)
+            // Save first (when auto-save is on) and hand the editor the file path so
+            // edits can be written back to it (and the history thumbnail refreshed).
+            let savedPath = prefs.automaticSave
+                ? saveImage(nsImage, type: type, addToHistory: true)?.path
+                : nil
+            openEditor(with: nsImage, filePath: savedPath)
         }
     }
 
@@ -300,7 +304,8 @@ final class CaptureManager {
 
     // MARK: - Save
 
-    private func saveImage(_ image: NSImage, type: CaptureType, addToHistory: Bool) {
+    @discardableResult
+    private func saveImage(_ image: NSImage, type: CaptureType, addToHistory: Bool) -> URL? {
         let prefs = store.preferences
         let saveDir = URL(fileURLWithPath: prefs.expandedSavePath)
         try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
@@ -328,6 +333,7 @@ final class CaptureManager {
             saveJPEGThumbnail(image, to: thumbURL)
             store.recordCapture(image: image, type: type, saveURL: url, thumbnailURL: thumbURL)
         }
+        return url
     }
 
     private func saveJPEG(_ image: NSImage, to url: URL, quality: Double) {
@@ -355,8 +361,8 @@ final class CaptureManager {
 
     // MARK: - Editor
 
-    private func openEditor(with image: NSImage) {
-        let editor = EditorWindow(image: image)
+    private func openEditor(with image: NSImage, filePath: String? = nil) {
+        let editor = EditorWindow(image: image, filePath: filePath)
         editor.show()
     }
 

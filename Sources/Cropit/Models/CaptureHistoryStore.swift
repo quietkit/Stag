@@ -20,9 +20,9 @@ struct CaptureRecord: Codable, Identifiable, Equatable {
     let type: CaptureType
     let filePath: String
     let thumbnailPath: String
-    let imageWidth: Int
-    let imageHeight: Int
-    let fileSize: Int64
+    var imageWidth: Int
+    var imageHeight: Int
+    var fileSize: Int64
     var ocrText: String?
 
     var dimensions: CGSize { CGSize(width: imageWidth, height: imageHeight) }
@@ -90,6 +90,38 @@ final class CaptureHistoryStore: ObservableObject {
     func remove(_ id: UUID) {
         records.removeAll { $0.id == id }
         save()
+    }
+
+    /// Called after the editor saves edits back to an existing capture file:
+    /// regenerates the thumbnail and refreshes the record so the grid updates.
+    func updateEditedImage(filePath: String, image: NSImage) {
+        guard let idx = records.firstIndex(where: { $0.filePath == filePath }) else { return }
+        var rec = records[idx]
+        Self.writeThumbnail(image, to: URL(fileURLWithPath: rec.thumbnailPath))
+        rec.imageWidth = Int(image.size.width)
+        rec.imageHeight = Int(image.size.height)
+        let byteCount = (try? Data(contentsOf: URL(fileURLWithPath: filePath)))?.count
+        rec.fileSize = byteCount.map(Int64.init) ?? rec.fileSize
+        records[idx] = rec    // re-emits @Published → cells re-read the new thumbnail
+        save()
+    }
+
+    static func writeThumbnail(_ image: NSImage, to url: URL) {
+        let maxDim: CGFloat = 320
+        let w = image.size.width, h = image.size.height
+        guard w > 0, h > 0 else { return }
+        let scale = min(maxDim / w, maxDim / h, 1.0)
+        let thumbSize = CGSize(width: w * scale, height: h * scale)
+        let thumb = NSImage(size: thumbSize)
+        thumb.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: thumbSize),
+                   from: NSRect(origin: .zero, size: image.size), operation: .copy, fraction: 1)
+        thumb.unlockFocus()
+        let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: 0.7]
+        guard let tiff = thumb.tiffRepresentation,
+              let bm = NSBitmapImageRep(data: tiff),
+              let data = bm.representation(using: .jpeg, properties: props) else { return }
+        try? data.write(to: url)
     }
 
     func removeAll() {

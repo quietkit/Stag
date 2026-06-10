@@ -157,11 +157,13 @@ struct HistoryBrowserView: View {
         let isHovered = hoveredId == record.id
         return VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
-                thumbnailImage(record)
-                    .frame(height: 124)
+                // "Cover" pattern: a fixed-height, full-width box that the image
+                // fills and crops, so every aspect ratio fills the cell width.
+                Color(nsColor: .controlBackgroundColor)
                     .frame(maxWidth: .infinity)
+                    .frame(height: 124)
+                    .overlay { thumbnailImage(record) }
                     .clipped()
-                    .background(Color(nsColor: .controlBackgroundColor))
                 typeBadge(record.type)
                     .padding(6)
             }

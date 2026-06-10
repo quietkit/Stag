@@ -120,6 +120,8 @@ struct EditorView: View {
         .frame(minWidth: 400, minHeight: 300)
         .onAppear { installKeyboardMonitor(); installScrollMonitor() }
         .onDisappear {
+            // Persist edits back to the source file on close (capture/history images).
+            if filePath != nil, hasEdits { saveBackToFile() }
             if let mon = keyboardMonitor { NSEvent.removeMonitor(mon) }
             if let mon = scrollMonitor { NSEvent.removeMonitor(mon) }
             keyboardMonitor = nil
@@ -379,6 +381,9 @@ struct EditorView: View {
             case (8, _) where mods == [.command]: // ⌘C — copy image & close editor
                 exportAndCopy()
                 window.performClose(nil)
+                return nil
+            case (1, _) where mods == [.command]: // ⌘S — save
+                exportAndSave()
                 return nil
             case (53, _): // Esc — deselect if something is selected, otherwise close the editor
                 if selectedAnnotationId != nil {
@@ -1853,6 +1858,13 @@ struct EditorView: View {
     }
 
     private func exportAndSave() {
+        // If this image came from a capture/history file, save edits back to it
+        // (overwrite) and refresh the history thumbnail — no Save panel needed.
+        if filePath != nil {
+            saveBackToFile()
+            ToastWindow.show("Saved", icon: "checkmark.circle.fill", iconColor: .green)
+            return
+        }
         guard let exported = exportImage() else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
@@ -1861,6 +1873,29 @@ struct EditorView: View {
             guard resp == .OK, let url = panel.url else { return }
             exported.pngWrite(to: url)
         }
+    }
+
+    /// True when the user has made any change worth persisting.
+    private var hasEdits: Bool {
+        !annotations.isEmpty || rotation != 0 || backdrop.isActive || !imageUndoStack.isEmpty
+    }
+
+    /// Writes the edited image back to its source file and updates history.
+    private func saveBackToFile() {
+        guard let path = filePath, let exported = exportImage() else { return }
+        let url = URL(fileURLWithPath: path)
+        let lower = path.lowercased()
+        if lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg") {
+            let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: 0.9]
+            if let tiff = exported.tiffRepresentation,
+               let bm = NSBitmapImageRep(data: tiff),
+               let data = bm.representation(using: .jpeg, properties: props) {
+                try? data.write(to: url)
+            }
+        } else {
+            exported.pngWrite(to: url)
+        }
+        AppStore.shared.history.updateEditedImage(filePath: path, image: exported)
     }
 
     /// Final exported image: the flattened annotated screenshot, wrapped in the
