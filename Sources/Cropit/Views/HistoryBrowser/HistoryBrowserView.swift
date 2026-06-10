@@ -19,7 +19,7 @@ struct HistoryBrowserView: View {
     @State private var selectedId: UUID?
     @State private var hoveredId: UUID?
 
-    private let columns = Array(repeating: GridItem(.fixed(180), spacing: 12), count: 3)
+    private let columns = [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 16)]
 
     private var filtered: [CaptureRecord] {
         let records = store.records
@@ -139,55 +139,66 @@ struct HistoryBrowserView: View {
 
     private var thumbnailGrid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(filtered) { record in
                     thumbnailCell(record)
-                        .frame(maxWidth: .infinity)
-                .onTapGesture { openEditor(record) }
-                .onTapGesture(count: 2) { selectedId = record.id }
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(selectedId == record.id ? Color.accentColor.opacity(0.1) : .clear)
-                        )
+                        // Double-click opens the editor; single click only selects.
+                        // (count:2 must be declared first so SwiftUI disambiguates.)
+                        .onTapGesture(count: 2) { openEditor(record) }
+                        .onTapGesture(count: 1) { selectedId = record.id }
                 }
             }
-            .padding(16)
+            .padding(18)
         }
     }
 
     private func thumbnailCell(_ record: CaptureRecord) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack {
+        let isSelected = selectedId == record.id
+        let isHovered = hoveredId == record.id
+        return VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .topTrailing) {
                 thumbnailImage(record)
-                    .frame(width: 180, height: 120)
+                    .frame(height: 124)
+                    .frame(maxWidth: .infinity)
                     .clipped()
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(hoveredId == record.id ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.1), lineWidth: 1)
+                    .background(Color(nsColor: .controlBackgroundColor))
                 typeBadge(record.type)
-                    .padding(4)
-                    .alignmentGuide(.top) { _ in 0 }
+                    .padding(6)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .scaleEffect(hoveredId == record.id ? 1.05 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: hoveredId)
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) { hoveredId = hovering ? record.id : nil }
-            }
-            .contextMenu { cellContextMenu(record) }
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+            .overlay(
+                RoundedRectangle(cornerRadius: 9)
+                    .stroke(isSelected ? Color.accentColor
+                            : (isHovered ? Color.accentColor.opacity(0.7) : Color.secondary.opacity(0.15)),
+                            lineWidth: isSelected || isHovered ? 2 : 1)
+            )
+            .shadow(color: .black.opacity(isHovered ? 0.18 : 0), radius: 6, y: 3)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(record.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.primary.opacity(0.8))
                     .lineLimit(1)
-
                 Text("\(record.imageWidth) × \(record.imageHeight)")
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary.opacity(0.6))
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.secondary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isSelected ? Color.accentColor.opacity(0.10) : .clear)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
+        .onHover { hovering in
+            hoveredId = hovering ? record.id : (hoveredId == record.id ? nil : hoveredId)
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .help("Double-click to open in editor")
+        .contextMenu { cellContextMenu(record) }
     }
 
     private func thumbnailImage(_ record: CaptureRecord) -> some View {
