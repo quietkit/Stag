@@ -5,6 +5,7 @@ let package = Package(
     name: "Cropit",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "Cropit", path: "Sources/Cropit", exclude: ["Info.plist"], resources: [.process("Resources")])
+        .executableTarget(name: "Cropit", path: "Sources/Cropit", exclude: ["Info.plist"], resources: [.process("Resources")]),
+        .testTarget(name: "CropitTests", dependencies: ["Cropit"], path: "Tests/CropitTests")
     ]
 )
