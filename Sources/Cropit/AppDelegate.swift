@@ -3,6 +3,11 @@ import SwiftUI
 import OSLog
 import Carbon
 
+extension Notification.Name {
+    /// Posted when capture hotkeys change in Settings, so they re-register live.
+    static let cropitHotkeysChanged = Notification.Name("cropitHotkeysChanged")
+}
+
 final class CropitAppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let captureManager: CaptureManager
@@ -31,6 +36,11 @@ final class CropitAppDelegate: NSObject, NSApplicationDelegate {
         installEventTap()        // also install event tap if Accessibility is granted
         registerURLScheme()
         createDefaultSaveFolder()
+        // Re-register global hotkeys live when the user changes them in Settings,
+        // so new shortcuts work without relaunching.
+        NotificationCenter.default.addObserver(forName: .cropitHotkeysChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.installCarbonHotkeys()
+        }
         logger.info("Cropit launched successfully")
     }
 

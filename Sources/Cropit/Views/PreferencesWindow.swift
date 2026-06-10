@@ -338,38 +338,51 @@ private struct PreferencesView: View {
 
     private var shortcutsTab: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Capture Shortcuts")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Text("Click a shortcut to record a new key combination.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Capture Shortcuts").font(.system(size: 15, weight: .semibold))
+                    Text("Click a shortcut, then press a combination with ⌘ ⌥ ⌃ or ⇧. Press Esc to cancel, or ✕ to clear.")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-                List {
-                    ForEach(CaptureType.allCases, id: \.self) { type in
+                VStack(spacing: 0) {
+                    let types = Array(CaptureType.allCases.enumerated())
+                    ForEach(types, id: \.element) { idx, type in
                         shortcutRow(type)
+                        if idx < types.count - 1 {
+                            Divider().padding(.leading, 38)
+                        }
                     }
                 }
-                .listStyle(.plain)
-                .frame(height: 180)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.05)))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.1), lineWidth: 1))
 
                 editorShortcutGuide
             }
+            .padding(.bottom, 8)
         }
     }
 
     private func shortcutRow(_ type: CaptureType) -> some View {
-        HStack {
-            Label(typeDisplayName(type), systemImage: typeIcon(type))
-                .font(.system(size: 12))
+        HStack(spacing: 10) {
+            Image(systemName: typeIcon(type))
+                .font(.system(size: 13))
+                .foregroundColor(.accentColor)
+                .frame(width: 18)
+            Text(typeDisplayName(type)).font(.system(size: 13))
             Spacer()
             ShortcutRecorder(current: Binding(
                 get: { prefs.hotkeys[type] ?? HotKeyCombination(keyCode: 0, modifiers: 0) },
-                set: { prefs.hotkeys[type] = $0; prefs.save() }
+                set: {
+                    prefs.hotkeys[type] = $0
+                    prefs.save()
+                    NotificationCenter.default.post(name: .cropitHotkeysChanged, object: nil)
+                }
             ))
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private func typeIcon(_ type: CaptureType) -> String {
@@ -395,21 +408,29 @@ private struct PreferencesView: View {
     }
 
     private var editorShortcutGuide: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Divider().padding(.vertical, 4)
-            Text("Editor Tool Shortcuts")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.secondary)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.fixed(70))], spacing: 2) {
-                let tools: [(String, String)] = [
-                    ("Rectangle", "2"), ("Circle", "3"), ("Arrow", "1"), ("Line", "L"),
-                    ("Text", "4"), ("Step Number", "8"), ("Freehand", "7"),
-                    ("Highlight", "6"), ("Blur", "5"), ("Mosaic", "9"),
-                    ("Emoji", "0"), ("Eraser", "X"), ("Eyedropper", "I"), ("Crop", "K"),
-                ]
-                ForEach(tools, id: \.0) { name, shortcut in
-                    Text(name).font(.system(size: 10))
-                    Text(shortcut).font(.system(size: 10, design: .monospaced)).foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Editor Tool Shortcuts").font(.system(size: 15, weight: .semibold))
+            let tools: [(String, String)] = [
+                ("Arrow", "1"), ("Rectangle", "2"), ("Circle", "3"), ("Text", "4"),
+                ("Blur", "5"), ("Highlight", "6"), ("Freehand", "7"), ("Step Number", "8"),
+                ("Mosaic", "9"), ("Emoji", "0"), ("Line", "L"), ("Eraser", "X"),
+                ("Eyedropper", "I"), ("Crop", "K"),
+            ]
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(tools, id: \.0) { name, key in
+                    HStack(spacing: 6) {
+                        Text(name).font(.system(size: 11))
+                        Spacer(minLength: 4)
+                        Text(key)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .frame(minWidth: 16)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.04)))
                 }
             }
         }
@@ -551,35 +572,43 @@ private struct ShortcutRecorder: View {
     @State private var isRecording = false
 
     var body: some View {
-        Button {
-            isRecording = true
-            ShortcutCapture.begin { combo in
-                if let combo = combo {
-                    current = combo
-                }
-                isRecording = false
-            }
-        } label: {
-            Text(displayText)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(isRecording ? .white : .secondary)
-                .frame(width: 120, height: 22)
-                .background(
-                    Group {
-                        if isRecording {
-                            Color.accentColor
-                        } else {
-                            Color.secondary.opacity(0.08)
-                        }
+        HStack(spacing: 4) {
+            Button {
+                if isRecording {
+                    ShortcutCapture.cancelActive()      // click again to cancel
+                } else {
+                    isRecording = true
+                    ShortcutCapture.begin { combo in
+                        if let combo = combo { current = combo }
+                        isRecording = false
                     }
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 1)
-                )
+                }
+            } label: {
+                Text(displayText)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(isRecording ? .white : .secondary)
+                    .frame(width: 116, height: 22)
+                    .background(isRecording ? Color.accentColor : Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+
+            // Clear button — only when a shortcut is set and not recording.
+            Button {
+                current = HotKeyCombination(keyCode: 0, modifiers: 0)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .opacity(!isRecording && current.keyCode != 0 ? 1 : 0)
+            .help("Clear shortcut")
         }
-        .buttonStyle(.plain)
     }
 
     private var displayText: String {
@@ -613,30 +642,41 @@ private struct ShortcutRecorder: View {
     }
 }
 
-// MARK: - ShortcutCapture (one-shot key capture)
+// MARK: - ShortcutCapture (single-flight key capture)
 
-private final class ShortcutCapture: NSObject {
+/// Records one global-hotkey combination. Only ONE capture can be active at a
+/// time — starting a new one (or clicking elsewhere) cancels the previous, so
+/// rows can never get stuck showing "Press shortcut…".
+private final class ShortcutCapture {
+    private static var active: ShortcutCapture?
+
     private var monitor: Any?
     private let completion: (HotKeyCombination?) -> Void
 
     private init(completion: @escaping (HotKeyCombination?) -> Void) {
         self.completion = completion
-        super.init()
     }
 
     static func begin(completion: @escaping (HotKeyCombination?) -> Void) {
+        cancelActive()                       // enforce single-flight
         let capture = ShortcutCapture(completion: completion)
-        capture.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
+        active = capture
+        capture.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            if event.type == .flagsChanged { return nil }       // ignore bare modifier presses
+            if event.keyCode == 53 { capture.finish(nil); return nil }   // Esc cancels
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard !mods.isEmpty else {
-                NSEvent.removeMonitor(capture.monitor!)
-                completion(nil)
-                return nil
-            }
-            let combo = HotKeyCombination(keyCode: event.keyCode, modifiers: mods.rawValue)
-            NSEvent.removeMonitor(capture.monitor!)
-            completion(combo)
+            guard !mods.isEmpty else { return nil }              // require ≥1 modifier; swallow bare keys
+            capture.finish(HotKeyCombination(keyCode: event.keyCode, modifiers: mods.rawValue))
             return nil
         }
+    }
+
+    /// Cancels any in-progress capture (resets its row to its previous value).
+    static func cancelActive() { active?.finish(nil) }
+
+    private func finish(_ combo: HotKeyCombination?) {
+        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        if ShortcutCapture.active === self { ShortcutCapture.active = nil }
+        completion(combo)
     }
 }
