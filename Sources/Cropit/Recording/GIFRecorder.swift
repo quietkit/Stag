@@ -164,9 +164,16 @@ final class GIFRecorder: NSObject, CaptureRecorder, ObservableObject, @unchecked
 
 extension GIFRecorder: SCStreamOutput {
     nonisolated func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .screen,
-              let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
-        else { return }
+        guard type == .screen, sampleBuffer.isValid else { return }
+        // Skip idle/blank frames (no screen change) — they carry no valid surface
+        // and would otherwise become black or redundant GIF frames.
+        if let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+            as? [[SCStreamFrameInfo: Any]],
+           let statusRaw = attachments.first?[.status] as? Int,
+           let status = SCFrameStatus(rawValue: statusRaw), status != .complete {
+            return
+        }
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let ciImage = CIImage(cvPixelBuffer: imageBuffer)
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) else { return }
 
