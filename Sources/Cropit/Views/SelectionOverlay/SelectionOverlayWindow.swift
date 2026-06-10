@@ -87,12 +87,11 @@ final class SelectionOverlayWindow: NSWindow {
         // overlay's SwiftUI view space (origin at the overlay's top-left, y-down).
         let primaryHeight = screens.first(where: { $0.frame.origin == .zero })?.frame.height
             ?? (NSScreen.main?.frame.height ?? totalFrame.height)
-        let offsetY = totalFrame.maxY - primaryHeight
         let windowHits: [WindowHit] = windows.map { w in
             WindowHit(
-                rect: CGRect(x: w.frame.minX - totalFrame.minX,
-                             y: offsetY + w.frame.minY,
-                             width: w.frame.width, height: w.frame.height),
+                rect: WindowFrameMapper.viewRect(cgFrame: w.frame,
+                                                 totalFrame: totalFrame,
+                                                 primaryHeight: primaryHeight),
                 title: w.title
             )
         }
