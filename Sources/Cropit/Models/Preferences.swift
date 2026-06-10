@@ -122,6 +122,20 @@ final class Preferences: ObservableObject {
     @Published var showCursorInRecording = true
     @Published var showKeystrokes = false
     @Published var uploadURL: String = ""
+    @Published var uploadMethod: String = "POST"        // POST or PUT
+    @Published var uploadFieldName: String = ""         // multipart field; empty = raw body
+    @Published var uploadHeaders: String = ""           // "Key: Value" per line
+    @Published var uploadResponseKey: String = ""       // JSON key path to the link
+
+    var uploadConfig: UploadConfig {
+        UploadConfig(
+            endpoint: uploadURL,
+            method: uploadMethod,
+            fieldName: uploadFieldName,
+            headers: UploadConfig.parseHeaders(uploadHeaders),
+            responseURLKey: uploadResponseKey
+        )
+    }
 
     // Sprint C — Webcam PiP
     @Published var webcamEnabled = false
@@ -179,6 +193,10 @@ final class Preferences: ObservableObject {
         showCursorInRecording = decoded.showCursorInRecording
         showKeystrokes = decoded.showKeystrokes
         uploadURL = decoded.uploadURL
+        uploadMethod = decoded.uploadMethod ?? "POST"
+        uploadFieldName = decoded.uploadFieldName ?? ""
+        uploadHeaders = decoded.uploadHeaders ?? ""
+        uploadResponseKey = decoded.uploadResponseKey ?? ""
         webcamEnabled = decoded.webcamEnabled
         webcamPosition = decoded.webcamPosition
         webcamSize = decoded.webcamSize
@@ -215,6 +233,10 @@ final class Preferences: ObservableObject {
             showCursorInRecording: showCursorInRecording,
             showKeystrokes: showKeystrokes,
             uploadURL: uploadURL,
+            uploadMethod: uploadMethod,
+            uploadFieldName: uploadFieldName,
+            uploadHeaders: uploadHeaders,
+            uploadResponseKey: uploadResponseKey,
             webcamEnabled: webcamEnabled,
             webcamPosition: webcamPosition,
             webcamSize: webcamSize,
@@ -253,6 +275,10 @@ final class Preferences: ObservableObject {
         var showCursorInRecording: Bool
         var showKeystrokes: Bool
         var uploadURL: String
+        var uploadMethod: String?
+        var uploadFieldName: String?
+        var uploadHeaders: String?
+        var uploadResponseKey: String?
         var webcamEnabled: Bool
         var webcamPosition: WebcamPosition
         var webcamSize: WebcamSize
