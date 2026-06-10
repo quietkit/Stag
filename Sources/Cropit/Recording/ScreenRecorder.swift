@@ -248,7 +248,19 @@ extension ScreenRecorder: SCStreamOutput {
         }
     }
 
+    /// SCStream delivers idle/blank frames (no screen change) that carry no valid
+    /// surface; appending them produces black/corrupt video. Only `.complete`
+    /// frames should be written.
+    private func isCompleteFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+                as? [[SCStreamFrameInfo: Any]],
+              let statusRaw = attachments.first?[.status] as? Int,
+              let status = SCFrameStatus(rawValue: statusRaw) else { return false }
+        return status == .complete
+    }
+
     private func handleVideoSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        guard sampleBuffer.isValid, isCompleteFrame(sampleBuffer) else { return }
         guard let input = videoInput, input.isReadyForMoreMediaData else { return }
 
         // Start the asset writer session at the first real frame timestamp so that

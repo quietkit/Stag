@@ -88,8 +88,11 @@ struct HotKeyCombination: Codable, Equatable {
             .window:    HotKeyCombination(keyCode: 19, modifiers: cmdShift),
             .fullscreen:HotKeyCombination(keyCode: 20, modifiers: cmdShift),
             .scrolling: HotKeyCombination(keyCode: 21, modifiers: cmdShift),
-            .recording: HotKeyCombination(keyCode: 22, modifiers: cmdShift),
-            .gif:      HotKeyCombination(keyCode: 23, modifiers: cmdShift),
+            // NOTE: macOS digit keycodes are NOT sequential — kVK_ANSI_5 = 23 and
+            // kVK_ANSI_6 = 22. Previously these were swapped, so ⌘⇧6 ("Record GIF"
+            // in the UI) actually fired the screen recorder.
+            .recording: HotKeyCombination(keyCode: 23, modifiers: cmdShift),  // ⌘⇧5
+            .gif:       HotKeyCombination(keyCode: 22, modifiers: cmdShift),  // ⌘⇧6
         ]
     }
 }
@@ -203,6 +206,14 @@ final class Preferences: ObservableObject {
         showMouseClicks = decoded.showMouseClicks
         autoDND = decoded.autoDND
         hotkeys = decoded.hotkeys
+        // Migrate the historically swapped Record/GIF keycodes (5↔6). Anyone who
+        // still has the old buggy defaults gets the corrected ⌘⇧5 / ⌘⇧6 binding.
+        let cmdShift: UInt = NSEvent.ModifierFlags.command.rawValue | NSEvent.ModifierFlags.shift.rawValue
+        if hotkeys[.recording]?.keyCode == 22, hotkeys[.recording]?.modifiers == cmdShift,
+           hotkeys[.gif]?.keyCode == 23, hotkeys[.gif]?.modifiers == cmdShift {
+            hotkeys[.recording] = HotKeyCombination(keyCode: 23, modifiers: cmdShift)
+            hotkeys[.gif] = HotKeyCombination(keyCode: 22, modifiers: cmdShift)
+        }
         windowCaptureShadow = decoded.windowCaptureShadow
         showFloatingThumbnail = decoded.showFloatingThumbnail
         dimSelectionOverlay = decoded.dimSelectionOverlay

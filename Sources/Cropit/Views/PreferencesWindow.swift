@@ -627,8 +627,10 @@ private struct ShortcutRecorder: View {
 
     private func keyName(_ code: UInt16) -> String {
         let map: [UInt16: String] = [
-            18: "1", 19: "2", 20: "3", 21: "4", 22: "5", 23: "6",
-            24: "7", 25: "8", 26: "9", 29: "0",
+            // True macOS ANSI digit keycodes (NOT sequential).
+            18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6",
+            26: "7", 28: "8", 25: "9", 29: "0",
+            24: "=", 27: "-",
             12: "Q", 13: "W", 14: "E", 15: "R", 16: "T", 17: "Y",
             32: "U", 34: "I", 31: "O", 35: "P",
             0:  "A", 1:  "S", 2:  "D", 3:  "F", 4:  "H", 5:  "G",

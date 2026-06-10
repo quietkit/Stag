@@ -404,14 +404,17 @@ struct EditorView: View {
             default:
                 break
             }
-            // Tool shortcuts 0-9
+            // Tool shortcuts. NOTE: macOS digit keycodes are non-sequential —
+            // 5=23, 6=22, 7=26, 8=28, 9=25 — so these were previously mismapped
+            // (e.g. pressing 5 selected Highlight instead of Blur).
             let toolMap: [UInt16: DrawingTool] = [
-                18: .arrow, 19: .rect, 20: .circle, 21: .text,
-                22: .blur, 23: .highlight, 24: .freehand, 25: .stepNumber,
-                26: .mosaic, 29: .emoji, 27: .ruler, 31: .spotlight, 7: .eraser,
-                37: .line,   // L
-                34: .eyedropper, // I
-                40: .crop,   // K
+                18: .arrow, 19: .rect, 20: .circle, 21: .text,   // 1 2 3 4
+                23: .blur, 22: .highlight, 26: .freehand, 28: .stepNumber, // 5 6 7 8
+                25: .mosaic, 29: .emoji,                         // 9 0
+                27: .ruler, 31: .spotlight, 7: .eraser,
+                37: .line,        // L
+                34: .eyedropper,  // I
+                40: .crop,        // K
             ]
             // Shift+number keys for secondary tools
             let shiftToolMap: [UInt16: DrawingTool] = [
