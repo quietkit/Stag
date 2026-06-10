@@ -449,16 +449,52 @@ private struct PreferencesView: View {
                 .padding(.top, 4)
 
                 Section {
-                    Text("Cloud Upload")
+                    Text("Cloud Upload / Share Links")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
                         .padding(.top, 8)
+                    Text("Upload to your OWN endpoint (server, S3-compatible gateway, image host). Nothing is ever uploaded automatically — only when you press Upload.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("https://example.com/upload", text: $prefs.uploadURL)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11, design: .monospaced))
-                        Text("PNG is POSTed to this URL. The response body is copied to clipboard.")
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Picker("", selection: $prefs.uploadMethod) {
+                                Text("POST").tag("POST")
+                                Text("PUT").tag("PUT")
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 110)
+                            TextField("https://example.com/upload", text: $prefs.uploadURL)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 11, design: .monospaced))
+                        }
+
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Multipart field").font(.system(size: 10)).foregroundColor(.secondary)
+                                TextField("empty = raw body", text: $prefs.uploadFieldName)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(size: 11, design: .monospaced))
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Response link key").font(.system(size: 10)).foregroundColor(.secondary)
+                                TextField("e.g. data.link", text: $prefs.uploadResponseKey)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(size: 11, design: .monospaced))
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Headers (one per line: Key: Value)").font(.system(size: 10)).foregroundColor(.secondary)
+                            TextEditor(text: $prefs.uploadHeaders)
+                                .font(.system(size: 11, design: .monospaced))
+                                .frame(height: 54)
+                                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.25), lineWidth: 1))
+                        }
+
+                        Text("Raw mode posts the PNG as the body. Multipart sends it as a file field. The returned link (whole body, or the JSON key above) is copied to your clipboard.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

@@ -62,7 +62,6 @@ struct EditorView: View {
 
     // Upload state
     @State private var uploading = false
-    @State private var uploadAlertMessage: String?
     @State private var zoomScale: CGFloat = 1.0
     @State private var panOffset: CGSize = .zero
 
@@ -248,14 +247,6 @@ struct EditorView: View {
             Button("OK") { ocrAlertMessage = nil }
         } message: {
             Text(ocrAlertMessage ?? "")
-        }
-        .alert("Upload", isPresented: Binding(
-            get: { uploadAlertMessage != nil },
-            set: { if !$0 { uploadAlertMessage = nil } }
-        )) {
-            Button("OK") { uploadAlertMessage = nil }
-        } message: {
-            Text(uploadAlertMessage ?? "")
         }
         .sheet(isPresented: $showingResizeDialog) {
             resizeDialogView
@@ -2084,33 +2075,28 @@ struct EditorView: View {
 
     private func uploadImage() {
         guard let exported = exportImage(), let png = exported.pngData else { return }
-        let urlStr = AppStore.shared.preferences.uploadURL
-        guard let url = URL(string: urlStr) else { return }
-
+        let config = AppStore.shared.preferences.uploadConfig
+        guard config.isConfigured else {
+            ToastWindow.show("No upload endpoint set", icon: "exclamationmark.triangle", iconColor: .orange)
+            return
+        }
         uploading = true
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("image/png", forHTTPHeaderField: "Content-Type")
-        req.httpBody = png
-
-        URLSession.shared.dataTask(with: req) { data, resp, error in
-            DispatchQueue.main.async {
-                self.uploading = false
-                if let error = error {
-                    self.uploadAlertMessage = "Upload failed: \(error.localizedDescription)"
-                    return
+        Task {
+            do {
+                let link = try await ImageUploader.upload(png, config: config)
+                await MainActor.run {
+                    self.uploading = false
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(link, forType: .string)
+                    ToastWindow.show("Link copied to clipboard", icon: "link", iconColor: .green)
                 }
-                guard let data = data, let responseStr = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines), !responseStr.isEmpty
-                else {
-                    self.uploadAlertMessage = "Uploaded (empty response)."
-                    return
+            } catch {
+                await MainActor.run {
+                    self.uploading = false
+                    ToastWindow.show(error.localizedDescription, icon: "xmark.octagon", iconColor: .red)
                 }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(responseStr, forType: .string)
-                self.uploadAlertMessage = "URL copied to clipboard."
             }
-        }.resume()
+        }
     }
 
     private func drawArrow(on ctx: CGContext, from start: CGPoint, to end: CGPoint, annotation: Annotation) {
