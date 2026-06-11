@@ -48,7 +48,7 @@ final class CaptureCursorManager {
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
             let cx = rect.midX, cy = rect.midY
             let radius: CGFloat = 6
-            let crossLen: CGFloat = 4
+            let crossLen: CGFloat = 9
 
             // Double‑stroke: dark outline → white fill for readability on any background.
             for (lw, r, g, b, a) in [
