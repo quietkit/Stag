@@ -108,14 +108,15 @@ final class Preferences: ObservableObject {
     @Published var filePrefix: String = "Cropit_"
     @Published var useSmartFilenames: Bool = true
     @Published var settingsAdvancedMode: Bool = false   // Settings: Simple vs Advanced
+    private var overlayMinimalApplied = false            // one-time minimal-overlay migration
     @Published var afterCaptureAction: AfterCaptureAction = .openEditor
     @Published var autoDismissDelay: TimeInterval = 5
     @Published var autoCopyToClipboard = true
     @Published var automaticSave = true
     @Published var thumbnailPosition: ThumbnailPosition = .bottomRight
     @Published var thumbnailSize: ThumbnailSize = .medium
-    @Published var showMagnifier = true
-    @Published var showCrosshair = true
+    @Published var showMagnifier = false
+    @Published var showCrosshair = false
     @Published var freezeScreenBeforeCapture = false
     @Published var hideDesktopIcons = false
     @Published var captureDelay: TimeInterval = 0
@@ -219,6 +220,16 @@ final class Preferences: ObservableObject {
         windowCaptureShadow = decoded.windowCaptureShadow
         showFloatingThumbnail = decoded.showFloatingThumbnail
         dimSelectionOverlay = decoded.dimSelectionOverlay
+
+        // One-time migration: the selection overlay is now minimal by default
+        // (no dim / magnifier / crosshair). Apply that once to existing installs.
+        overlayMinimalApplied = decoded.overlayMinimalApplied ?? false
+        if !overlayMinimalApplied {
+            dimSelectionOverlay = false
+            showMagnifier = false
+            showCrosshair = false
+            overlayMinimalApplied = true
+        }
     }
 
     func save() {
@@ -229,6 +240,7 @@ final class Preferences: ObservableObject {
             filePrefix: filePrefix,
             useSmartFilenames: useSmartFilenames,
             settingsAdvancedMode: settingsAdvancedMode,
+            overlayMinimalApplied: overlayMinimalApplied,
             afterCaptureAction: afterCaptureAction,
             autoDismissDelay: autoDismissDelay,
             autoCopyToClipboard: autoCopyToClipboard,
@@ -272,6 +284,7 @@ final class Preferences: ObservableObject {
         var filePrefix: String?          // optional for backward compatibility
         var useSmartFilenames: Bool?     // optional for backward compatibility
         var settingsAdvancedMode: Bool?  // optional for backward compatibility
+        var overlayMinimalApplied: Bool? // optional for backward compatibility
         var afterCaptureAction: AfterCaptureAction
         var autoDismissDelay: TimeInterval
         var autoCopyToClipboard: Bool

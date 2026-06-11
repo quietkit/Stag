@@ -27,57 +27,50 @@ final class WebcamCaptureManager: NSObject {
 
     func start() {
         guard !isRunning else { return }
+        // Request camera permission first (macOS requires NSCameraUsageDescription)
+        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+            guard granted else {
+                os_log(.error, "Camera access denied – webcam overlay disabled")
+                return
+            }
+            DispatchQueue.main.async { self?.setupAndRunSession() }
+        }
+    }
+
+    // Separate method so we can call it after permission is granted
+    private func setupAndRunSession() {
         let device = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.external, .builtInWideAngleCamera],
             mediaType: .video,
             position: .unspecified
         ).devices.first
         guard let device = device else { return }
-
         guard let input = try? AVCaptureDeviceInput(device: device) else { return }
-
         captureSession.beginConfiguration()
         captureSession.sessionPreset = .medium
-
         guard captureSession.canAddInput(input) else {
             captureSession.commitConfiguration()
             return
         }
         captureSession.addInput(input)
-
-        videoDataOutput.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ]
+        videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
         videoDataOutput.setSampleBufferDelegate(self, queue: processingQueue)
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
-
         guard captureSession.canAddOutput(videoDataOutput) else {
             captureSession.commitConfiguration()
             return
         }
         captureSession.addOutput(videoDataOutput)
-
         if let connection = videoDataOutput.connection(with: .video) {
             if #available(macOS 14, *) {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
+                if connection.isVideoRotationAngleSupported(90) { connection.videoRotationAngle = 90 }
             } else {
-                if connection.isVideoOrientationSupported {
-                    connection.videoOrientation = .portrait
-                }
+                if connection.isVideoOrientationSupported { connection.videoOrientation = .portrait }
             }
-            if connection.isVideoMirroringSupported {
-                connection.isVideoMirrored = true
-            }
+            if connection.isVideoMirroringSupported { connection.isVideoMirrored = true }
         }
-
         captureSession.commitConfiguration()
-
-        processingQueue.async { [weak self] in
-            self?.captureSession.startRunning()
-        }
-
+        processingQueue.async { [weak self] in self?.captureSession.startRunning() }
         isRunning = true
     }
 
