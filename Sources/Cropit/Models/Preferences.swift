@@ -121,7 +121,6 @@ final class Preferences: ObservableObject {
     @Published var hideDesktopIcons = false
     @Published var captureDelay: TimeInterval = 0
     @Published var recordingQuality: RecordingQuality = .high
-    @Published var recordingFps: Int = 30
     @Published var recordSystemAudio = true
     @Published var recordMicrophone = false
     @Published var showCursorInRecording = true
@@ -193,7 +192,6 @@ final class Preferences: ObservableObject {
         hideDesktopIcons = decoded.hideDesktopIcons
         captureDelay = decoded.captureDelay
         recordingQuality = decoded.recordingQuality
-        recordingFps = decoded.recordingFps
         recordSystemAudio = decoded.recordSystemAudio
         recordMicrophone = decoded.recordMicrophone
         showCursorInRecording = decoded.showCursorInRecording
@@ -253,7 +251,6 @@ final class Preferences: ObservableObject {
             hideDesktopIcons: hideDesktopIcons,
             captureDelay: captureDelay,
             recordingQuality: recordingQuality,
-            recordingFps: recordingFps,
             recordSystemAudio: recordSystemAudio,
             recordMicrophone: recordMicrophone,
             showCursorInRecording: showCursorInRecording,
@@ -297,7 +294,6 @@ final class Preferences: ObservableObject {
         var hideDesktopIcons: Bool
         var captureDelay: TimeInterval
         var recordingQuality: RecordingQuality
-        var recordingFps: Int
         var recordSystemAudio: Bool
         var recordMicrophone: Bool
         var showCursorInRecording: Bool
