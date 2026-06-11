@@ -7,9 +7,8 @@ import ScreenCaptureKit
 // mouseMoved event — no need to manually re-call NSCursor.set().
 private final class CrosshairHostingView<Content: View>: NSHostingView<Content> {
     override func resetCursorRects() {
-        // The capture cursor is managed globally by CaptureCursorManager,
-        // so we just ensure it's active on every cursor rect reset.
-        CaptureCursorManager.shared.apply()
+        guard let cursor = CaptureCursorManager.shared.currentCursor else { return }
+        addCursorRect(bounds, cursor: cursor)
     }
 }
 
@@ -77,11 +76,12 @@ final class SelectionOverlayWindow: NSWindow {
     // MARK: Show / hide
 
     func show() {
+        CaptureCursorManager.shared.apply()
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        // Set the cursor after the window is visible and app is active, so it doesn't
-        // get overridden by the system during app activation.
-        CaptureCursorManager.shared.apply()
+        // Force cursor to appear immediately.
+        CaptureCursorManager.shared.currentCursor?.set()
+        NSCursor.setHiddenUntilMouseMoves(false)
         DispatchQueue.main.async { [weak self] in
             guard let self, let cv = self.contentView else { return }
             self.invalidateCursorRects(for: cv)
