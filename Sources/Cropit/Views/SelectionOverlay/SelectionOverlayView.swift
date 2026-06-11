@@ -9,6 +9,7 @@ struct SelectionOverlayView: View {
     let onCancel: () -> Void
     var dimOverlay: Bool = true   // false = Shottr "no-overlay" minimal mode
     var showMagnifier: Bool = true
+    var showCrosshair: Bool = true
     var detectedWindows: [WindowHit] = []
 
     private enum Phase { case idle, drawing, adjusting }
@@ -290,7 +291,9 @@ struct SelectionOverlayView: View {
 
     @ViewBuilder
     private var crosshairGuides: some View {
-        if dimOverlay && (hovering || phase == .drawing) {
+        // Full-screen guide lines, controlled by the "Show crosshair" setting
+        // (independent of the dim mode).
+        if showCrosshair && (hovering || phase == .drawing) {
             CrosshairGuides(at: mouseLocation, size: bounds)
         }
     }

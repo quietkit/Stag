@@ -3,10 +3,30 @@ import Cocoa
 // MARK: - Shared Selection Helper
 
 enum RecordingTargetSelector {
+    /// Region selector for screen recording / GIF. Uses the SAME rich selection
+    /// overlay as area capture (adjustable handles, action bar, loupe, crosshair,
+    /// window hover-highlight) but returns the selected screen rect instead of an
+    /// image.
     static func select() async throws -> (CGRect, CGDirectDisplayID) {
+        let prefs = AppStore.shared.preferences
+        let freeze = prefs.freezeScreenBeforeCapture
+        let showMagnifier = prefs.showMagnifier
+
+        async let compositeTask: CGImage? = (freeze || showMagnifier) ? (try? await ScreenComposite.capture()) : nil
+        async let windowsTask: [DetectedWindow] = WindowEnumerator.enumerate()
+        let composite = await compositeTask
+        let windows = await windowsTask
+
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.main.async {
-                let overlay = RecordingRectOverlay()
+                let overlay = SelectionOverlayWindow(
+                    frozenImage: freeze ? composite : nil,
+                    sampleImage: composite,
+                    dimOverlay: prefs.dimSelectionOverlay,
+                    showMagnifier: showMagnifier,
+                    showCrosshair: prefs.showCrosshair,
+                    windows: windows
+                )
                 overlay.onRectSelected = { rect, displayID in
                     continuation.resume(returning: (rect, displayID))
                 }
