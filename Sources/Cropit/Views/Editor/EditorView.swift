@@ -1503,6 +1503,13 @@ struct EditorView: View {
         .buttonStyle(.plain)
         .modernTooltip(toolHelp(tool))
         .scaleEffect(currentTool == tool ? 1.05 : 1.0)
+        .onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
     }
 
     private func toolHelp(_ tool: DrawingTool) -> String {
@@ -1649,6 +1656,7 @@ struct EditorView: View {
             }
             .buttonStyle(.plain)
             .help("Zoom Out (⌘-)")
+            .handCursorOnHover()
 
             Text("\(Int(zoomScale * 100))%")
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
@@ -1661,6 +1669,7 @@ struct EditorView: View {
             }
             .buttonStyle(.plain)
             .help("Zoom In (⌘=)")
+            .handCursorOnHover()
 
             Button { resetZoom() } label: {
                 Image(systemName: "arrow.counterclockwise")
@@ -1681,6 +1690,7 @@ struct EditorView: View {
             }
             .buttonStyle(.plain)
             .help("Rotate Left")
+            .handCursorOnHover()
 
             Text("\(Int(rotation))°")
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
@@ -1693,6 +1703,7 @@ struct EditorView: View {
             }
             .buttonStyle(.plain)
             .help("Rotate Right")
+            .handCursorOnHover()
 
             if rotation != 0 {
                 Button { rotate(0) } label: {
@@ -2535,11 +2546,36 @@ enum HoverPhase {
     case moved(CGPoint)
 }
 
-// MARK: - Tooltip (using standard help modifier)
+// MARK: - Tooltip and Cursor Helpers
 
 extension View {
     /// Tooltip helper - uses macOS standard help text
     func modernTooltip(_ text: String) -> some View {
         self.help(text)
+    }
+
+    /// Hand pointer cursor on hover (for all interactive elements)
+    func handCursorOnHover() -> some View {
+        self.onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+    }
+}
+
+// Custom button style that automatically shows hand cursor on hover
+struct HandCursorButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.pointingHand.set()
+                } else {
+                    NSCursor.arrow.set()
+                }
+            }
     }
 }
