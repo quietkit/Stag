@@ -8,6 +8,7 @@ final class CaptureCursorManager {
     private var isActive = false
     private var cursor: NSCursor?
     private var activationObserver: Any?
+    private var mouseMonitor: Any?
 
     private init() {
         // Listen for app activation to re‑apply the cursor if needed.
@@ -32,14 +33,31 @@ final class CaptureCursorManager {
         cursor = CaptureCursorManager.createCursor()
         cursor?.set()
         NSCursor.setHiddenUntilMouseMoves(false)
+        installMouseMonitor()
     }
 
     /// Remove the custom cursor and restore the system default.
     func remove() {
         guard isActive else { return }
         isActive = false
+        removeMouseMonitor()
         cursor?.pop()
         cursor = nil
+    }
+
+    private func installMouseMonitor() {
+        removeMouseMonitor()
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            guard let self = self, self.isActive else { return }
+            self.cursor?.set()
+        }
+    }
+
+    private func removeMouseMonitor() {
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseMonitor = nil
+        }
     }
 
     @objc private func appDidActivate() {
