@@ -32,7 +32,7 @@ final class CaptureCursorManager {
         guard !isActive else { return }
         isActive = true
         cursor = CaptureCursorManager.createCursor()
-        cursor?.set()
+        cursor?.push()  // Push cursor to stack so it persists across windows
         NSCursor.setHiddenUntilMouseMoves(false)
         installEventMonitor()
         startCursorTimer()
@@ -44,18 +44,20 @@ final class CaptureCursorManager {
         isActive = false
         stopCursorTimer()
         removeEventMonitor()
-        cursor?.pop()
+        cursor?.pop()  // Pop from stack to restore previous cursor
         cursor = nil
     }
 
     private func installEventMonitor() {
         removeEventMonitor()
-        // Monitor mouse moves and clicks to re-apply cursor constantly.
-        // This keeps it visible even when switching windows/apps during capture.
+        // Monitor mouse moves and clicks to re-apply cursor as safety net.
+        // The push() in apply() keeps it in the cursor stack persistently.
         let eventMask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp]
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: eventMask) { [weak self] event in
             if self?.isActive == true {
-                self?.cursor?.set()
+                DispatchQueue.main.async { [weak self] in
+                    self?.cursor?.set()
+                }
             }
             return event
         }
@@ -70,11 +72,13 @@ final class CaptureCursorManager {
 
     private func startCursorTimer() {
         stopCursorTimer()
-        // Timer constantly re-applies cursor every 50ms while capture is active.
-        // This ensures the cursor stays visible even when moving to other windows.
-        cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            guard self?.isActive == true else { return }
-            self?.cursor?.set()
+        // Timer re-applies cursor frequently as safety net.
+        // The push() in apply() keeps it in the cursor stack persistently.
+        cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self, self.isActive else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.cursor?.set()
+            }
         }
     }
 
