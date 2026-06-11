@@ -157,7 +157,7 @@ final class Preferences: ObservableObject {
     @Published var showFloatingThumbnail: Bool = false
     /// When true: dims the unselected area (non-selection), making selection stand out
     @Published var dimSelectionOverlay: Bool = false
-    @Published var directCapture: Bool = false  // When true, capture immediately; when false, show resize handles
+    @Published var directCapture: Bool = true  // When true, capture immediately; when false, show resize handles
     @Published var hotkeys: [CaptureType: HotKeyCombination] = HotKeyCombination.default()
 
     var expandedSavePath: String {
