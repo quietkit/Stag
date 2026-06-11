@@ -1949,29 +1949,36 @@ struct EditorView: View {
         ctx.fill(CGRect(origin: .zero, size: imgSize))
         workingImage.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1)
 
+        // The lockFocus context is y-up (origin bottom-left) but annotations are
+        // stored in SwiftUI y-down coords. Flip each annotation's geometry so it
+        // lands at the same place it was drawn on screen. (blur/mosaic already
+        // flip internally, so they receive the raw y-down rect.)
+        let H = imgSize.height
+        func fp(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x, y: H - p.y) }
+        func fr(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: H - r.maxY, width: r.width, height: r.height) }
+
         for annotation in annotations {
-            // SwiftUI Color.cgColor is nil for standard colors (.red etc.), which
-            // made every annotation export as the white fallback. NSColor(_:).cgColor
-            // converts reliably.
+            // SwiftUI Color.cgColor is nil for standard colors (.red etc.) — use
+            // NSColor(_:).cgColor which converts reliably.
             ctx.setStrokeColor(NSColor(annotation.color).cgColor)
             ctx.setLineWidth(annotation.lineWidth)
 
             switch annotation.type {
             case .arrow(let start, let end):
-                drawArrow(on: ctx, from: start, to: end, annotation: annotation)
+                drawArrow(on: ctx, from: fp(start), to: fp(end), annotation: annotation)
             case .line(let start, let end):
-                ctx.move(to: start)
-                ctx.addLine(to: end)
+                ctx.move(to: fp(start))
+                ctx.addLine(to: fp(end))
                 ctx.strokePath()
             case .rect(let origin, let size):
-                let rr = CGRect(origin: origin, size: size).standardized
+                let rr = fr(CGRect(origin: origin, size: size).standardized)
                 if let fc = annotation.fillColor {
                     ctx.setFillColor(NSColor(fc).cgColor)
                     ctx.fill(rr)
                 }
                 ctx.stroke(rr)
             case .circle(let origin, let size):
-                let ce = CGRect(origin: origin, size: size).standardized
+                let ce = fr(CGRect(origin: origin, size: size).standardized)
                 if let fc = annotation.fillColor {
                     ctx.setFillColor(NSColor(fc).cgColor)
                     ctx.fillEllipse(in: ce)
@@ -1985,21 +1992,23 @@ struct EditorView: View {
                     .font: font,
                     .foregroundColor: NSColor(annotation.color)
                 ]
-                text.draw(at: pos, withAttributes: attrs)
+                // In y-up, draw point is the text's lower-left — offset by line height
+                // so the on-screen top-left position is preserved.
+                let th = (text as NSString).size(withAttributes: attrs).height
+                text.draw(at: CGPoint(x: pos.x, y: H - pos.y - th), withAttributes: attrs)
             case .blur(let origin, let size):
                 applyRealBlur(on: ctx, rect: CGRect(origin: origin, size: size).standardized, imageSize: imgSize)
             case .highlight(let origin, let size):
                 ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.3)!)
-                ctx.fill(CGRect(origin: origin, size: size).standardized)
+                ctx.fill(fr(CGRect(origin: origin, size: size).standardized))
             case .freehand(let points):
                 guard points.count > 1 else { break }
-                ctx.move(to: points[0])
-                for pt in points.dropFirst() {
-                    ctx.addLine(to: pt)
-                }
+                ctx.move(to: fp(points[0]))
+                for pt in points.dropFirst() { ctx.addLine(to: fp(pt)) }
                 ctx.strokePath()
             case .stepNumber(let center, let number):
-                let r = CGRect(origin: center, size: .zero).insetBy(dx: -16, dy: -16)
+                let c = fp(center)
+                let r = CGRect(origin: c, size: .zero).insetBy(dx: -16, dy: -16)
                 ctx.setFillColor(NSColor(annotation.color).cgColor)
                 ctx.fillEllipse(in: r)
                 let text = "\(number)"
@@ -2008,7 +2017,7 @@ struct EditorView: View {
                     .foregroundColor: NSColor.white
                 ]
                 let textSize = text.size(withAttributes: attrs)
-                text.draw(at: CGPoint(x: center.x - textSize.width / 2, y: center.y - textSize.height / 2), withAttributes: attrs)
+                text.draw(at: CGPoint(x: c.x - textSize.width / 2, y: c.y - textSize.height / 2), withAttributes: attrs)
             case .mosaic(let origin, let size):
                 applyRealMosaic(on: ctx, rect: CGRect(origin: origin, size: size).standardized, imageSize: imgSize)
             case .emoji(let pos, let emojiChar, let fontSize):
@@ -2017,42 +2026,46 @@ struct EditorView: View {
                     .foregroundColor: NSColor(annotation.color)
                 ]
                 let textSize = emojiChar.size(withAttributes: attrs)
-                emojiChar.draw(at: CGPoint(x: pos.x - textSize.width / 2, y: pos.y - textSize.height / 2), withAttributes: attrs)
+                let c = fp(pos)
+                emojiChar.draw(at: CGPoint(x: c.x - textSize.width / 2, y: c.y - textSize.height / 2), withAttributes: attrs)
             case .ruler(let start, let end):
-                drawRuler(on: ctx, from: start, to: end, annotation: annotation)
+                drawRuler(on: ctx, from: fp(start), to: fp(end), annotation: annotation)
             case .spotlight(let origin, let size):
                 applySpotlight(on: ctx, rect: CGRect(origin: origin, size: size).standardized, imageSize: imgSize)
             case .curvedArrow(let start, let control, let end):
+                let s = fp(start), control2 = fp(control), e = fp(end)
                 let path = CGMutablePath()
-                path.move(to: start)
-                let cp1 = CGPoint(x: start.x + (control.x - start.x) * 0.5, y: start.y + (control.y - start.y) * 0.3)
-                let cp2 = CGPoint(x: control.x, y: control.y)
-                path.addCurve(to: end, control1: cp1, control2: cp2)
+                path.move(to: s)
+                let cp1 = CGPoint(x: s.x + (control2.x - s.x) * 0.5, y: s.y + (control2.y - s.y) * 0.3)
+                let cp2 = control2
+                path.addCurve(to: e, control1: cp1, control2: cp2)
                 let arrowSize: CGFloat = 12 * annotation.lineWidth
-                let angle = atan2(end.y - control.y, end.x - control.x)
-                let ap1 = CGPoint(x: end.x - arrowSize * cos(angle - .pi / 6), y: end.y - arrowSize * sin(angle - .pi / 6))
-                let ap2 = CGPoint(x: end.x - arrowSize * cos(angle + .pi / 6), y: end.y - arrowSize * sin(angle + .pi / 6))
-                path.addLine(to: ap1); path.move(to: end); path.addLine(to: ap2)
+                let angle = atan2(e.y - control2.y, e.x - control2.x)
+                let ap1 = CGPoint(x: e.x - arrowSize * cos(angle - .pi / 6), y: e.y - arrowSize * sin(angle - .pi / 6))
+                let ap2 = CGPoint(x: e.x - arrowSize * cos(angle + .pi / 6), y: e.y - arrowSize * sin(angle + .pi / 6))
+                path.addLine(to: ap1); path.move(to: e); path.addLine(to: ap2)
                 ctx.addPath(path)
                 ctx.strokePath()
             case .smartHighlight(let origin, let size):
-                let r = CGRect(origin: origin, size: size).standardized
+                let r = fr(CGRect(origin: origin, size: size).standardized)
                 ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.3)!)
                 ctx.fill(r)
                 ctx.setStrokeColor(NSColor(annotation.color).cgColor)
                 ctx.setLineWidth(2)
-                ctx.strokeLineSegments(between: [CGPoint(x: r.minX, y: r.maxY), CGPoint(x: r.maxX, y: r.maxY)])
+                // underline along the on-screen bottom edge (now r.minY in y-up)
+                ctx.strokeLineSegments(between: [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY)])
             case .magnifierCallout(let center, let calloutPoint, let radius, let magScale):
+                let c = fp(center), cp = fp(calloutPoint)
                 let r = radius
                 ctx.setStrokeColor(NSColor(annotation.color).cgColor)
                 ctx.setLineWidth(2)
-                ctx.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r*2, height: r*2))
-                ctx.strokeLineSegments(between: [center, calloutPoint])
-                let bubbleRect = CGRect(x: calloutPoint.x - 50, y: calloutPoint.y - 15, width: 100, height: 30)
+                ctx.strokeEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: r*2, height: r*2))
+                ctx.strokeLineSegments(between: [c, cp])
+                let bubbleRect = CGRect(x: cp.x - 50, y: cp.y - 15, width: 100, height: 30)
                 ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.2)!)
                 ctx.fill(bubbleRect)
                 let text = "\(Int(magScale))x" as NSString
-                text.draw(at: CGPoint(x: calloutPoint.x - 25, y: calloutPoint.y - 10), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(annotation.color)])
+                text.draw(at: CGPoint(x: cp.x - 25, y: cp.y - 10), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(annotation.color)])
             case .freehandErase:
                 break
             }

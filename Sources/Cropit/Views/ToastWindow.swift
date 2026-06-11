@@ -88,9 +88,10 @@ private struct ToastView: View {
             Text(message)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.primary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .fixedSize()   // keep the pill on one line; the window sizes to fit
         }
+        .fixedSize()
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.regularMaterial, in: Capsule())
