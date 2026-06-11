@@ -83,7 +83,8 @@ final class AppStore: ObservableObject {
     }
 
     func recordCapture(image: NSImage, type: CaptureType, saveURL: URL, thumbnailURL: URL) {
-        let record = CaptureRecord(image: image, type: type, saveURL: saveURL, thumbnailURL: thumbnailURL)
+        let record = CaptureRecord(image: image, type: type, saveURL: saveURL, thumbnailURL: thumbnailURL,
+                                   appName: CaptureContext.shared.sourceAppName)
         history.add(record)
     }
 
