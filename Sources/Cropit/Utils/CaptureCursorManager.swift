@@ -8,6 +8,7 @@ final class CaptureCursorManager {
     private var isActive = false
     private var cursor: NSCursor?
     private var activationObserver: Any?
+    private var eventMonitor: Any?
 
     private init() {
         // Listen for app activation to re‑apply the cursor if needed.
@@ -32,14 +33,36 @@ final class CaptureCursorManager {
         cursor = CaptureCursorManager.createCursor()
         cursor?.set()
         NSCursor.setHiddenUntilMouseMoves(false)
+        installEventMonitor()
     }
 
     /// Remove the custom cursor and restore the system default.
     func remove() {
         guard isActive else { return }
         isActive = false
+        removeEventMonitor()
         cursor?.pop()
         cursor = nil
+    }
+
+    private func installEventMonitor() {
+        removeEventMonitor()
+        // Monitor mouse moves and clicks to re-apply cursor constantly.
+        // This keeps it visible even when switching windows/apps during capture.
+        let eventMask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp]
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: eventMask) { [weak self] event in
+            if self?.isActive == true {
+                self?.cursor?.set()
+            }
+            return event
+        }
+    }
+
+    private func removeEventMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
     }
 
     @objc private func appDidActivate() {

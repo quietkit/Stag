@@ -5,7 +5,7 @@ final class PreferencesWindow: NSWindow, NSWindowDelegate {
     private let hostingView: NSHostingView<PreferencesView>
 
     init() {
-        let size = NSSize(width: 900, height: 600)
+        let size = NSSize(width: 1000, height: 650)
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let origin = CGPoint(
             x: screen.frame.midX - size.width / 2,
@@ -24,7 +24,7 @@ final class PreferencesWindow: NSWindow, NSWindowDelegate {
 
         title = "Settings"
         isReleasedWhenClosed = false
-        minSize = NSSize(width: 700, height: 500)
+        minSize = NSSize(width: 800, height: 550)
         setFrameAutosaveName("PreferencesWindow")
         hostingView.frame = NSRect(origin: .zero, size: size)
         hostingView.autoresizingMask = [.width, .height]
@@ -54,11 +54,9 @@ private struct PreferencesView: View {
     @ObservedObject var prefs: Preferences
     @State private var selectedTab: SettingsTab = .general
 
-    /// Tabs shown in each mode. Simple keeps the essentials; Advanced shows all.
+    /// All tabs are always shown
     private var visibleTabs: [SettingsTab] {
-        prefs.settingsAdvancedMode
-            ? SettingsTab.allCases
-            : [.general, .capture, .shortcuts]
+        SettingsTab.allCases
     }
 
     enum SettingsTab: String, CaseIterable {
@@ -89,24 +87,13 @@ private struct PreferencesView: View {
 
     var body: some View {
         NavigationSplitView {
-            VStack(spacing: 0) {
-                Picker("", selection: $prefs.settingsAdvancedMode) {
-                    Text("Simple").tag(false)
-                    Text("Advanced").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-
-                List(visibleTabs, id: \.self, selection: $selectedTab) { tab in
-                    Label(tab.label, systemImage: tab.icon)
-                        .font(.system(size: 12))
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 4)
-                }
-                .listStyle(.sidebar)
+            List(visibleTabs, id: \.self, selection: $selectedTab) { tab in
+                Label(tab.label, systemImage: tab.icon)
+                    .font(.system(size: 12))
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 4)
             }
+            .listStyle(.sidebar)
             .frame(minWidth: 160, idealWidth: 170, maxWidth: 180)
             .navigationSplitViewColumnWidth(min: 155, ideal: 165, max: 180)
         } detail: {
@@ -115,10 +102,6 @@ private struct PreferencesView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: prefs.settingsAdvancedMode) { _, _ in
-            // If the current tab is hidden by switching to Simple, fall back.
-            if !visibleTabs.contains(selectedTab) { selectedTab = .general }
-        }
         .onDisappear { prefs.save() }
     }
 
