@@ -24,10 +24,12 @@ struct CaptureRecord: Codable, Identifiable, Equatable {
     var imageHeight: Int
     var fileSize: Int64
     var ocrText: String?
+    var appName: String?      // frontmost app at capture time
+    var isFavorite: Bool      // starred by user
 
     var dimensions: CGSize { CGSize(width: imageWidth, height: imageHeight) }
 
-    init(image: NSImage, type: CaptureType, saveURL: URL, thumbnailURL: URL) {
+    init(image: NSImage, type: CaptureType, saveURL: URL, thumbnailURL: URL, appName: String? = nil) {
         self.id = UUID()
         self.date = Date()
         self.type = type
@@ -37,6 +39,30 @@ struct CaptureRecord: Codable, Identifiable, Equatable {
         self.imageHeight = Int(image.size.height)
         self.fileSize = Int64((try? Data(contentsOf: saveURL).count) ?? 0)
         self.ocrText = nil
+        self.appName = appName
+        self.isFavorite = false
+    }
+
+    // Codable with backward-compatible defaults
+    private enum CodingKeys: String, CodingKey {
+        case id, date, type, filePath, thumbnailPath
+        case imageWidth, imageHeight, fileSize, ocrText
+        case appName, isFavorite
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id            = try c.decode(UUID.self, forKey: .id)
+        date          = try c.decode(Date.self, forKey: .date)
+        type          = try c.decode(CaptureType.self, forKey: .type)
+        filePath      = try c.decode(String.self, forKey: .filePath)
+        thumbnailPath = try c.decode(String.self, forKey: .thumbnailPath)
+        imageWidth    = try c.decode(Int.self, forKey: .imageWidth)
+        imageHeight   = try c.decode(Int.self, forKey: .imageHeight)
+        fileSize      = try c.decode(Int64.self, forKey: .fileSize)
+        ocrText       = try c.decodeIfPresent(String.self, forKey: .ocrText)
+        appName       = try c.decodeIfPresent(String.self, forKey: .appName)
+        isFavorite    = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
     }
 }
 
@@ -55,6 +81,7 @@ final class CaptureHistoryStore: ObservableObject {
         let q = searchQuery.lowercased()
         return records.filter { record in
             if record.ocrText?.localizedCaseInsensitiveContains(q) == true { return true }
+            if record.appName?.localizedCaseInsensitiveContains(q) == true { return true }
             let filename = (record.filePath as NSString).lastPathComponent.lowercased()
             if filename.contains(q) { return true }
             let fmt = DateFormatter()
@@ -89,6 +116,12 @@ final class CaptureHistoryStore: ObservableObject {
 
     func remove(_ id: UUID) {
         records.removeAll { $0.id == id }
+        save()
+    }
+
+    func toggleFavorite(_ id: UUID) {
+        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
+        records[idx].isFavorite.toggle()
         save()
     }
 
@@ -135,6 +168,30 @@ final class CaptureHistoryStore: ObservableObject {
 
     func records(since date: Date) -> [CaptureRecord] {
         records.filter { $0.date >= date }
+    }
+
+    /// Writes a JSON sidecar file next to the image, returns the sidecar URL.
+    @discardableResult
+    func exportMetadata(for record: CaptureRecord) -> URL? {
+        let imageURL = URL(fileURLWithPath: record.filePath)
+        let sidecarURL = imageURL.deletingPathExtension().appendingPathExtension("json")
+        let payload: [String: Any?] = [
+            "id":          record.id.uuidString,
+            "date":        ISO8601DateFormatter().string(from: record.date),
+            "type":        record.type.rawValue,
+            "filePath":    record.filePath,
+            "width":       record.imageWidth,
+            "height":      record.imageHeight,
+            "fileSize":    record.fileSize,
+            "appName":     record.appName,
+            "isFavorite":  record.isFavorite,
+            "ocrText":     record.ocrText,
+        ]
+        let cleaned = payload.compactMapValues { $0 }
+        guard let data = try? JSONSerialization.data(withJSONObject: cleaned,
+                                                     options: [.prettyPrinted, .sortedKeys]) else { return nil }
+        try? data.write(to: sidecarURL, options: .atomic)
+        return sidecarURL
     }
 
     // MARK: - Persistence
