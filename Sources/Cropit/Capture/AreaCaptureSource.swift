@@ -7,6 +7,7 @@ final class AreaCaptureSource: CaptureSource {
     func beginCapture(store: AppStore) async throws -> CaptureOutput {
         let freeze = store.preferences.freezeScreenBeforeCapture
         let showMagnifier = store.preferences.showMagnifier
+        let showCrosshair = store.preferences.showCrosshair
 
         // Capture a clean composite (frozen background / true-color loupe source)
         // and enumerate windows (for hover-to-capture) concurrently so their
@@ -23,7 +24,7 @@ final class AreaCaptureSource: CaptureSource {
             DispatchQueue.main.async {
                 let overlay = SelectionOverlayWindow(frozenImage: frozenImage, sampleImage: sampleImage,
                                                      dimOverlay: dimOverlay, showMagnifier: showMagnifier,
-                                                     windows: windows)
+                                                     showCrosshair: showCrosshair, windows: windows)
                 overlay.onCapture = { image in
                     continuation.resume(returning: image)
                 }

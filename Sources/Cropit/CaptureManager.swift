@@ -22,6 +22,9 @@ final class CaptureManager {
         guard currentSource == nil else { return }
 
         store.captureState = .selecting
+        // Hide our own windows so the editor/history don't appear over (or show
+        // through) the selection overlay during capture.
+        CaptureWindowHider.shared.hide()
         let source = makeSource(for: type)
         currentSource = source
 
@@ -44,7 +47,7 @@ final class CaptureManager {
 
             guard await AppStore.requestPermissionAndCheck() else {
                 await MainActor.run {
-                    DesktopIconsManager.shared.restore()
+                    DesktopIconsManager.shared.restore(); CaptureWindowHider.shared.restore()
                     DNDManager.shared.restore()
                     self.store.didFail(with: .screenRecordingPermissionDenied)
                     self.currentSource = nil
@@ -63,7 +66,7 @@ final class CaptureManager {
                     await MainActor.run { overlay.close() }
                     guard completed else {
                         await MainActor.run {
-                            DesktopIconsManager.shared.restore()
+                            DesktopIconsManager.shared.restore(); CaptureWindowHider.shared.restore()
                             DNDManager.shared.restore()
                             self.currentSource = nil
                             self.store.resetState()
@@ -74,7 +77,7 @@ final class CaptureManager {
 
                 let output = try await source.beginCapture(store: self.store)
                 await MainActor.run {
-                    DesktopIconsManager.shared.restore()
+                    DesktopIconsManager.shared.restore(); CaptureWindowHider.shared.restore()
                     DNDManager.shared.restore()
                     switch output {
                     case .image(let cgImage):
@@ -86,7 +89,7 @@ final class CaptureManager {
                 }
             } catch {
                 await MainActor.run {
-                    DesktopIconsManager.shared.restore()
+                    DesktopIconsManager.shared.restore(); CaptureWindowHider.shared.restore()
                     DNDManager.shared.restore()
                     self.currentSource = nil
                     // Cast first — pattern-matching on `Error` existential doesn't work directly
@@ -107,7 +110,7 @@ final class CaptureManager {
 
     func cancelCapture() {
         currentSource = nil
-        DesktopIconsManager.shared.restore()
+        DesktopIconsManager.shared.restore(); CaptureWindowHider.shared.restore()
         DNDManager.shared.restore()
         store.resetState()
     }
@@ -383,7 +386,8 @@ final class CaptureManager {
             // Clean loupe source so the magnifier reads true colors, not our overlay.
             let sample: CGImage? = showMagnifier ? try? await ScreenComposite.capture() : nil
             let overlay = SelectionOverlayWindow(frozenImage: nil, sampleImage: sample,
-                                                 dimOverlay: dimOverlay, showMagnifier: showMagnifier)
+                                                 dimOverlay: dimOverlay, showMagnifier: showMagnifier,
+                                                 showCrosshair: prefs.showCrosshair)
             overlay.onCapture = { [weak self] cgImage in
                 guard let self else { return }
                 Task { @MainActor in

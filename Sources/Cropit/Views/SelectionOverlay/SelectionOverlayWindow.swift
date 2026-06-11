@@ -16,6 +16,9 @@ private final class CrosshairHostingView<Content: View>: NSHostingView<Content> 
 final class SelectionOverlayWindow: NSWindow {
     var onCapture: ((CGImage) -> Void)?
     var onCancel:  (() -> Void)?
+    /// When set, the overlay returns the selected screen rect + display instead of
+    /// capturing an image (used for screen recording / GIF region selection).
+    var onRectSelected: ((CGRect, CGDirectDisplayID) -> Void)?
     private let frozenImage: CGImage?      // visible frozen background (freeze pref)
 
     // MARK: Precision cursor — scope + crosshair, double-stroked for any background
@@ -77,7 +80,7 @@ final class SelectionOverlayWindow: NSWindow {
     ///   - sampleImage: clean composite the loupe samples from (independent of the
     ///     visible background) so pixel colors read true, not through our dim overlay.
     init(frozenImage: CGImage? = nil, sampleImage: CGImage? = nil,
-         dimOverlay: Bool = true, showMagnifier: Bool = true,
+         dimOverlay: Bool = true, showMagnifier: Bool = true, showCrosshair: Bool = true,
          windows: [DetectedWindow] = []) {
         self.frozenImage = frozenImage
         let screens = NSScreen.screens
@@ -123,6 +126,7 @@ final class SelectionOverlayWindow: NSWindow {
             },
             dimOverlay: dimOverlay,
             showMagnifier: showMagnifier,
+            showCrosshair: showCrosshair,
             detectedWindows: windowHits
         )
 
@@ -171,6 +175,16 @@ final class SelectionOverlayWindow: NSWindow {
         }) else { return }
 
         let displayFrame = screen.frame
+        let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32)
+            ?? CGMainDisplayID()
+
+        // ── Rect-only mode: hand back the selected screen rect (for recording/GIF)
+        //    instead of capturing an image. ────────────────────────────────────
+        if let onRectSelected {
+            let screenRect = CGRect(x: cgX, y: cgMinY, width: viewRect.width, height: viewRect.height)
+            onRectSelected(screenRect, displayID)
+            return
+        }
 
         // ── Frozen-image path: crop the pre-captured composite ──────────────
         if let frozen = frozenImage {
@@ -195,9 +209,6 @@ final class SelectionOverlayWindow: NSWindow {
         let scale     = screen.backingScaleFactor
         let srcX      = cgX - displayFrame.origin.x
         let srcY      = displayFrame.maxY - cgMaxY  // flip Cocoa → top-origin
-
-        let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-            as? UInt32 ?? CGMainDisplayID()
 
         do {
             let content   = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
