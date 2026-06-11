@@ -13,12 +13,16 @@ final class CaptureCursorManager {
         NotificationCenter.default.addObserver(self, selector: #selector(appDidActivate), name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
+    /// The currently active cursor (read‑only for cursor‑rect registration).
+    var currentCursor: NSCursor? { cursor }
+
     /// Install the custom cursor globally for the capture session.
     func apply() {
         guard !isActive else { return }
         isActive = true
         cursor = CaptureCursorManager.createCursor()
         cursor?.set()
+        NSCursor.setHiddenUntilMouseMoves(false)
     }
 
     /// Remove the custom cursor and restore the system default.
@@ -38,18 +42,38 @@ final class CaptureCursorManager {
 
     // MARK: - Cursor creation
     private static func createCursor() -> NSCursor {
-        // Small (12 × 12 pt) circle with thin stroke, suitable for Light/Dark mode.
-        let size: CGFloat = 12
+        // Small (18 × 18 pt) circle with a plus sign, double‑stroked for contrast.
+        let size: CGFloat = 18
         let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let center = CGPoint(x: rect.midX, y: rect.midY)
-            let radius: CGFloat = 5
-            ctx.setLineWidth(1.0)
-            // Use labelColor for contrast on both themes.
-            let stroke = NSColor.labelColor.cgColor
-            ctx.setStrokeColor(stroke)
-            ctx.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-            ctx.strokePath()
+            let cx = rect.midX, cy = rect.midY
+            let radius: CGFloat = 6
+            let crossLen: CGFloat = 4
+
+            // Double‑stroke: dark outline → white fill for readability on any background.
+            for (lw, r, g, b, a) in [
+                (CGFloat(2.0), CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0.65)),
+                (CGFloat(1.2), CGFloat(1), CGFloat(1), CGFloat(1), CGFloat(1.0 )),
+            ] {
+                ctx.setStrokeColor(CGColor(red: r, green: g, blue: b, alpha: a))
+                ctx.setLineWidth(lw)
+
+                // Circle
+                ctx.addEllipse(in: CGRect(x: cx - radius, y: cy - radius,
+                                          width: radius * 2, height: radius * 2))
+                ctx.strokePath()
+
+                // Plus sign arms
+                ctx.setLineCap(.round)
+                ctx.beginPath()
+                // Horizontal
+                ctx.move(to: CGPoint(x: cx - crossLen, y: cy))
+                ctx.addLine(to: CGPoint(x: cx + crossLen, y: cy))
+                // Vertical
+                ctx.move(to: CGPoint(x: cx, y: cy - crossLen))
+                ctx.addLine(to: CGPoint(x: cx, y: cy + crossLen))
+                ctx.strokePath()
+            }
             return true
         }
         img.isTemplate = false
