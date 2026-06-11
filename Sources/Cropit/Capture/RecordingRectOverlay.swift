@@ -7,17 +7,14 @@ enum RecordingTargetSelector {
     /// overlay as area capture (adjustable handles, action bar, loupe, crosshair,
     /// window hover-highlight) but returns the selected screen rect instead of an
     /// image.
-    static func select() async throws -> (CGRect, CGDirectDisplayID) {
+    static func select(mode: CaptureMode = .recording) async throws -> (CGRect, CGDirectDisplayID) {
         let prefs = AppStore.shared.preferences
         let freeze = prefs.freezeScreenBeforeCapture
         let showMagnifier = prefs.showMagnifier
         let dimOverlay = prefs.dimSelectionOverlay
         let showCrosshair = prefs.showCrosshair
 
-        async let compositeTask: CGImage? = (freeze || showMagnifier) ? (try? await ScreenComposite.capture()) : nil
-        async let windowsTask: [DetectedWindow] = WindowEnumerator.enumerate()
-        let composite = await compositeTask
-        let windows = await windowsTask
+        let composite = (freeze || showMagnifier) ? (try? await ScreenComposite.capture()) : nil
 
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.main.async {
@@ -27,7 +24,7 @@ enum RecordingTargetSelector {
                     dimOverlay: dimOverlay,
                     showMagnifier: showMagnifier,
                     showCrosshair: showCrosshair,
-                    windows: windows
+                    mode: mode
                 )
                 overlay.onRectSelected = { rect, displayID in
                     continuation.resume(returning: (rect, displayID))

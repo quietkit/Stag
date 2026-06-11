@@ -1,16 +1,28 @@
 import SwiftUI
 import AppKit
 
+enum CaptureMode {
+    case area, recording, gif, ocr
+    var actionLabel: String {
+        switch self {
+        case .area: return "Capture"
+        case .recording: return "Record"
+        case .gif: return "Create GIF"
+        case .ocr: return "Scan"
+        }
+    }
+}
+
 struct SelectionOverlayView: View {
     let screenFrame: NSRect
     let frozenImage: CGImage?      // visible frozen background (freeze pref)
     var sampleImage: CGImage?      // clean source the loupe samples for true colors
     let onCapture: (CGRect) -> Void
     let onCancel: () -> Void
+    var mode: CaptureMode = .area
     var dimOverlay: Bool = true   // false = Shottr "no-overlay" minimal mode
     var showMagnifier: Bool = true
     var showCrosshair: Bool = true
-    var detectedWindows: [WindowHit] = []
 
     private enum Phase { case idle, drawing, adjusting }
     private enum Handle { case tl, tr, bl, br, top, bottom, left, right, inside }
@@ -299,9 +311,10 @@ struct SelectionOverlayView: View {
     private var actionBar: some View {
         if phase == .adjusting, let rect = selection {
             let bar = actionBarRect(for: rect)
+            let icon = mode == .recording ? "circle.fill" : mode == .gif ? "film.fill" : mode == .ocr ? "text.viewfinder" : "camera.fill"
             HStack(spacing: 8) {
                 Button(action: confirm) {
-                    Label("Capture", systemImage: "camera.fill")
+                    Label(mode.actionLabel, systemImage: icon)
                         .font(.system(size: 12, weight: .semibold))
                 }
                 .buttonStyle(.borderedProminent)

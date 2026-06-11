@@ -1999,8 +1999,10 @@ struct EditorView: View {
             case .blur(let origin, let size):
                 applyRealBlur(on: ctx, rect: CGRect(origin: origin, size: size).standardized, imageSize: imgSize)
             case .highlight(let origin, let size):
-                ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.3)!)
-                ctx.fill(fr(CGRect(origin: origin, size: size).standardized))
+                if let color = NSColor(annotation.color).cgColor.copy(alpha: 0.3) {
+                    ctx.setFillColor(color)
+                    ctx.fill(fr(CGRect(origin: origin, size: size).standardized))
+                }
             case .freehand(let points):
                 guard points.count > 1 else { break }
                 ctx.move(to: fp(points[0]))
@@ -2048,8 +2050,10 @@ struct EditorView: View {
                 ctx.strokePath()
             case .smartHighlight(let origin, let size):
                 let r = fr(CGRect(origin: origin, size: size).standardized)
-                ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.3)!)
-                ctx.fill(r)
+                if let fillColor = NSColor(annotation.color).cgColor.copy(alpha: 0.3) {
+                    ctx.setFillColor(fillColor)
+                    ctx.fill(r)
+                }
                 ctx.setStrokeColor(NSColor(annotation.color).cgColor)
                 ctx.setLineWidth(2)
                 // underline along the on-screen bottom edge (now r.minY in y-up)
@@ -2062,8 +2066,10 @@ struct EditorView: View {
                 ctx.strokeEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: r*2, height: r*2))
                 ctx.strokeLineSegments(between: [c, cp])
                 let bubbleRect = CGRect(x: cp.x - 50, y: cp.y - 15, width: 100, height: 30)
-                ctx.setFillColor(NSColor(annotation.color).cgColor.copy(alpha: 0.2)!)
-                ctx.fill(bubbleRect)
+                if let bubbleColor = NSColor(annotation.color).cgColor.copy(alpha: 0.2) {
+                    ctx.setFillColor(bubbleColor)
+                    ctx.fill(bubbleRect)
+                }
                 let text = "\(Int(magScale))x" as NSString
                 text.draw(at: CGPoint(x: cp.x - 25, y: cp.y - 10), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(annotation.color)])
             case .freehandErase:
