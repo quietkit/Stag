@@ -16,9 +16,7 @@ struct HistoryBrowserView: View {
     @StateObject private var store = AppStore.shared.history
     @State private var filterType: CaptureType? = nil
     @State private var searchText = ""
-    @State private var selectedId: UUID?
     @State private var hoveredId: UUID?
-    @State private var singleTapWork: DispatchWorkItem?
 
     private let columns = [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 16)]
 
@@ -143,17 +141,12 @@ struct HistoryBrowserView: View {
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(filtered) { record in
                     thumbnailCell(record)
-                        // Double-click opens the editor; single click only selects.
-                        // Use a short delay so the double-tap cancels the single-tap action.
-                        .onTapGesture(count: 2) {
-                            singleTapWork?.cancel()
+                        // Single-click opens the editor
+                        .onTapGesture {
                             openEditor(record)
                         }
-                        .onTapGesture(count: 1) {
-                            singleTapWork?.cancel()
-                            let work = DispatchWorkItem { selectedId = record.id }
-                            singleTapWork = work
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+                        .onHover { hovering in
+                            hoveredId = hovering ? record.id : nil
                         }
                 }
             }
@@ -162,7 +155,6 @@ struct HistoryBrowserView: View {
     }
 
     private func thumbnailCell(_ record: CaptureRecord) -> some View {
-        let isSelected = selectedId == record.id
         let isHovered = hoveredId == record.id
         return VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
@@ -179,9 +171,8 @@ struct HistoryBrowserView: View {
             .clipShape(RoundedRectangle(cornerRadius: 9))
             .overlay(
                 RoundedRectangle(cornerRadius: 9)
-                    .stroke(isSelected ? Color.accentColor
-                            : (isHovered ? Color.accentColor.opacity(0.7) : Color.secondary.opacity(0.15)),
-                            lineWidth: isSelected || isHovered ? 2 : 1)
+                    .stroke(isHovered ? Color.accentColor.opacity(0.7) : Color.secondary.opacity(0.15),
+                            lineWidth: isHovered ? 2 : 1)
             )
             .shadow(color: .black.opacity(isHovered ? 0.18 : 0), radius: 6, y: 3)
 
@@ -200,18 +191,11 @@ struct HistoryBrowserView: View {
         .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(isSelected ? Color.accentColor.opacity(0.10) : .clear)
+                .fill(.clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .animation(.easeInOut(duration: 0.12), value: isHovered)
-        .onHover { hovering in
-            hoveredId = hovering ? record.id : (hoveredId == record.id ? nil : hoveredId)
-            // set() (not push/pop) — can't leak an unbalanced cursor stack when a
-            // hovered cell is recycled out of the lazy grid mid-scroll.
-            if hovering { NSCursor.pointingHand.set() }
-            else if hoveredId == nil { NSCursor.arrow.set() }
-        }
-        .help("Double-click to open in editor")
+        .help("Click to open in editor")
         .contextMenu { cellContextMenu(record) }
     }
 
