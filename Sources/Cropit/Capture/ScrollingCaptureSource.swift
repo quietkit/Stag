@@ -41,12 +41,31 @@ final class ScrollingCaptureSource: CaptureSource {
     private func performScrollingCapture(windowID: CGWindowID) async throws -> CGImage {
         capturedWindowID = windowID
 
+        // Posting synthetic scroll events is silently dropped by macOS unless the
+        // app has Accessibility permission — without it we'd capture a single
+        // static frame and look broken. Check up front and tell the user.
+        guard Self.ensureAccessibilityPermission() else {
+            throw CaptureError.captureFailed(reason:
+                "Scrolling capture needs Accessibility permission to scroll the window.\n\n" +
+                "Enable Cropit in System Settings → Privacy & Security → Accessibility, then try again.")
+        }
+
         // Get window info for dimensions
         guard let windowInfo = findWindowInfo(windowID: windowID) else {
             throw CaptureError.captureFailed(reason: "Window not found")
         }
         let windowRect = windowInfo.rect
-        let windowPID = windowInfo.pid
+
+        // Scroll events are routed by their screen location, so aim at the center
+        // of the target window regardless of where the cursor ended up.
+        // kCGWindowBounds and CGEvent.location share the same top-left global coords.
+        let scrollPoint = CGPoint(x: windowRect.midX, y: windowRect.midY)
+
+        // Bring the target app forward once and let it settle before scrolling.
+        if let app = NSRunningApplication(processIdentifier: windowInfo.pid) {
+            app.activate(options: .activateIgnoringOtherApps)
+        }
+        try await Task.sleep(nanoseconds: 300_000_000)
 
         // First capture
         let firstImage = try await captureWindowImage(windowID: windowID)
@@ -63,7 +82,7 @@ final class ScrollingCaptureSource: CaptureSource {
         while hasMoreContent && scrollAttempts < maxScrollAttempts {
             scrollAttempts += 1
 
-            scrollWindow(pid: windowPID, pixels: pageScroll)
+            scrollWindow(at: scrollPoint, pixels: pageScroll)
             try await Task.sleep(nanoseconds: 350_000_000)
 
             let newImage = try await captureWindowImage(windowID: windowID)
@@ -80,10 +99,18 @@ final class ScrollingCaptureSource: CaptureSource {
 
         // Scroll back to the top so we leave the window as we found it.
         for _ in 0..<scrollAttempts {
-            scrollWindow(pid: windowPID, pixels: -pageScroll)
+            scrollWindow(at: scrollPoint, pixels: -pageScroll)
         }
 
         return try stitchWithOverlap(frames.map { $0.image })
+    }
+
+    /// True when the app is trusted for Accessibility (required to post scroll
+    /// events). Prompts the user with the system dialog on first failure.
+    private static func ensureAccessibilityPermission() -> Bool {
+        if AXIsProcessTrusted() { return true }
+        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(opts)
     }
 
     private func imagesEqual(_ a: CGImage, _ b: CGImage) -> Bool {
@@ -114,13 +141,13 @@ final class ScrollingCaptureSource: CaptureSource {
         return nil
     }
 
-    private func scrollWindow(pid: pid_t, pixels: Int) {
-        guard let app = NSRunningApplication(processIdentifier: pid) else { return }
-        app.activate(options: .activateIgnoringOtherApps)
+    private func scrollWindow(at point: CGPoint, pixels: Int) {
         // Pixel units give a predictable, overlap-friendly scroll distance.
         // Negative wheel1 advances content downward (page-down).
         let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
                             wheelCount: 1, wheel1: Int32(-pixels), wheel2: 0, wheel3: 0)
+        // Route the scroll to the target window, not wherever the cursor is.
+        event?.location = point
         event?.post(tap: .cghidEventTap)
     }
 
