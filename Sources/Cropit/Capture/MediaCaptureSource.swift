@@ -12,6 +12,7 @@ final class MediaCaptureSource: CaptureSource {
     private var stopContinuation: CheckedContinuation<Void, Never>?
     var onRecordingStarted: (() -> Void)?
     var onRecordingStopped: (() -> Void)?
+    private var borderOverlay: RecordBorderOverlay?
 
     init(
         type: CaptureType,
@@ -32,6 +33,8 @@ final class MediaCaptureSource: CaptureSource {
     }
 
     func requestStop() {
+        borderOverlay?.close()
+        borderOverlay = nil
         stopRequested = true
         Task { @MainActor in
             _ = await recorder.stopCapture()
@@ -55,6 +58,11 @@ final class MediaCaptureSource: CaptureSource {
         let nsScreen = NSScreen.screens.first { screen in
             (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32) == display
         }
+        // Show border around the recording region
+        let border = RecordBorderOverlay(rect: selectionRect)
+        border.show()
+        borderOverlay = border
+
         let captureRect: CGRect? = nsScreen.map { screen in
             let df = screen.frame
             return CGRect(
@@ -103,6 +111,8 @@ final class MediaCaptureSource: CaptureSource {
         do {
             try await recorder.startCapture(filter: filter, config: config, outputURL: outputURL)
         } catch {
+            borderOverlay?.close()
+            borderOverlay = nil
             hud.close()
             onRecordingStopped?()
             throw error
