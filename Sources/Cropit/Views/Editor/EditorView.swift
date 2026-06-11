@@ -82,6 +82,8 @@ struct EditorView: View {
 
     // Keyboard monitor token
     @State private var keyboardMonitor: Any? = nil
+    // Set to true when ESC/⌘C trigger an async background save, so onDisappear skips the redundant sync save
+    @State private var backgroundSaveInFlight = false
 
     // Crop tool
     @State private var cropRect: CGRect? = nil
@@ -120,8 +122,9 @@ struct EditorView: View {
         .frame(minWidth: 400, minHeight: 300)
         .onAppear { installKeyboardMonitor(); installScrollMonitor() }
         .onDisappear {
-            // Persist edits back to the source file on close (capture/history images).
-            if filePath != nil, hasEdits { saveBackToFile() }
+            // Persist edits back to the source file on close.
+            // Skip if ESC/⌘C already dispatched a background save for this session.
+            if filePath != nil, hasEdits, !backgroundSaveInFlight { saveBackToFile() }
             if let mon = keyboardMonitor { NSEvent.removeMonitor(mon) }
             if let mon = scrollMonitor { NSEvent.removeMonitor(mon) }
             keyboardMonitor = nil
@@ -379,16 +382,29 @@ struct EditorView: View {
                 deleteSelected()
                 return nil
             case (8, _) where mods == [.command]: // ⌘C — save edits, copy, dismiss
-                saveBackToFile()
-                exportAndCopy()
+                // Render once; use for both clipboard copy and background save.
+                if let exported = exportImage() {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.writeObjects([exported])
+                    if hasEdits, let path = filePath {
+                        backgroundSaveInFlight = true
+                        Self.backgroundWrite(exported, to: path)
+                    }
+                }
                 window.performClose(nil)
                 return nil
             case (1, _) where mods == [.command]: // ⌘S — save
                 exportAndSave()
                 return nil
-            case (53, _): // Esc — save edits and dismiss
-                saveBackToFile()
-                window.performClose(nil)
+            case (53, _): // Esc — render now (fast), close immediately, write in background (slow)
+                if hasEdits, let path = filePath {
+                    let exported = exportImage() ?? workingImage
+                    backgroundSaveInFlight = true
+                    window.performClose(nil)
+                    Self.backgroundWrite(exported, to: path)
+                } else {
+                    window.performClose(nil)
+                }
                 return nil
             case (24, _) where mods == [.command]: // ⌘=
                 zoomIn()
@@ -411,27 +427,21 @@ struct EditorView: View {
             // Don't activate tool shortcuts while the text input alert is visible.
             guard !showingTextAlert else { return event }
 
-            // Tool shortcuts. NOTE: macOS digit keycodes are non-sequential —
-            // 5=23, 6=22, 7=26, 8=28, 9=25 — so these were previously mismapped
-            // (e.g. pressing 5 selected Highlight instead of Blur).
-            let toolMap: [UInt16: DrawingTool] = [
-                18: .arrow, 19: .rect, 20: .circle, 21: .text,   // 1 2 3 4
-                23: .blur, 22: .highlight, 26: .freehand, 28: .stepNumber, // 5 6 7 8
-                25: .mosaic, 29: .emoji,                         // 9 0
-                27: .ruler, 31: .spotlight, 7: .eraser,
-                37: .line,        // L
-                34: .eyedropper,  // I
-                40: .crop,        // K
-            ]
-            // Shift+number keys for secondary tools
-            let shiftToolMap: [UInt16: DrawingTool] = [
-                18: .curvedArrow, 19: .smartHighlight, 20: .magnifierCallout
-            ]
-            if let tool = shiftToolMap[event.keyCode], mods == .shift {
+            // Tool shortcuts — look up from user-configurable prefs.
+            // Keys stored as single chars ("l", "1") or "⇧" + char for shift variants.
+            let bindings = AppStore.shared.preferences.editorHotkeys
+            var charToTool: [String: DrawingTool] = [:]
+            for (toolRaw, keyChar) in bindings {
+                if let tool = DrawingTool(rawValue: toolRaw) {
+                    charToTool[keyChar] = tool
+                }
+            }
+            let char = event.charactersIgnoringModifiers?.lowercased() ?? ""
+            if mods == .shift, let tool = charToTool["⇧\(char)"] {
                 currentTool = tool
                 return nil
             }
-            if let tool = toolMap[event.keyCode], mods.isEmpty {
+            if mods.isEmpty, let tool = charToTool[char] {
                 currentTool = tool
                 return nil
             }
@@ -1541,14 +1551,7 @@ struct EditorView: View {
     }
 
     private func toolShortcut(_ tool: DrawingTool) -> String {
-        let map: [DrawingTool: String] = [
-            .arrow: "1", .curvedArrow: "⇧1", .line: "L", .rect: "2", .circle: "3", .text: "4",
-            .blur: "5", .highlight: "6", .smartHighlight: "⇧6", .freehand: "7",
-            .stepNumber: "8", .mosaic: "9", .emoji: "0", .ruler: "-",
-            .spotlight: "O", .magnifierCallout: "⇧O", .eraser: "X",
-            .eyedropper: "I", .crop: "K"
-        ]
-        return map[tool] ?? ""
+        AppStore.shared.preferences.editorHotkeys[tool.rawValue]?.uppercased() ?? ""
     }
 
     private var fillToggle: some View {
@@ -1872,28 +1875,37 @@ struct EditorView: View {
         !annotations.isEmpty || rotation != 0 || backdrop.isActive || !imageUndoStack.isEmpty
     }
 
-    /// Writes the edited image back to its source file and updates history.
-    /// Returns whether the file was actually written.
+    /// Writes the edited image back to its source file synchronously (for ⌘S and safety-net onDisappear).
     @discardableResult
     private func saveBackToFile() -> Bool {
         guard let path = filePath else { return false }
-        // Fall back to the raw working image if flattening somehow fails, so we
-        // never silently "succeed" without writing anything.
         let exported = exportImage() ?? workingImage
-        let url = URL(fileURLWithPath: path)
+        return Self.writeImageSync(exported, to: path)
+    }
 
+    /// Encodes and writes `image` to `path` on a background queue.
+    /// History thumbnail is refreshed on the main queue when done.
+    private static func backgroundWrite(_ image: NSImage, to path: String) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            writeImageSync(image, to: path)
+        }
+    }
+
+    /// Encodes and writes synchronously; returns true on success.
+    @discardableResult
+    private static func writeImageSync(_ image: NSImage, to path: String) -> Bool {
+        let url = URL(fileURLWithPath: path)
         let lower = path.lowercased()
         let data: Data?
         if lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg") {
             let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: 0.9]
-            if let tiff = exported.tiffRepresentation, let bm = NSBitmapImageRep(data: tiff) {
-                data = bm.representation(using: .jpeg, properties: props)
-            } else { data = nil }
+            data = image.tiffRepresentation
+                .flatMap { NSBitmapImageRep(data: $0) }
+                .flatMap { $0.representation(using: .jpeg, properties: props) }
         } else {
-            data = exported.pngData
+            data = image.pngData
         }
         guard let data else { return false }
-
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
@@ -1901,7 +1913,9 @@ struct EditorView: View {
         } catch {
             return false
         }
-        AppStore.shared.history.updateEditedImage(filePath: path, image: exported)
+        DispatchQueue.main.async {
+            AppStore.shared.history.updateEditedImage(filePath: path, image: image)
+        }
         return true
     }
 

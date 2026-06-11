@@ -107,7 +107,6 @@ final class Preferences: ObservableObject {
     @Published var savePath: String = "~/Desktop/Cropit Screenshots"
     @Published var filePrefix: String = "Cropit_"
     @Published var useSmartFilenames: Bool = true
-    @Published var settingsAdvancedMode: Bool = false   // Settings: Simple vs Advanced
     private var overlayMinimalApplied = false            // one-time minimal-overlay migration
     @Published var afterCaptureAction: AfterCaptureAction = .openEditor
     @Published var autoDismissDelay: TimeInterval = 5
@@ -159,6 +158,16 @@ final class Preferences: ObservableObject {
     @Published var dimSelectionOverlay: Bool = false
     @Published var directCapture: Bool = true  // When true, capture immediately; when false, show resize handles
     @Published var hotkeys: [CaptureType: HotKeyCombination] = HotKeyCombination.default()
+    /// Editor tool key bindings: DrawingTool.rawValue → display key char ("1", "l", "⇧1", …)
+    @Published var editorHotkeys: [String: String] = Preferences.defaultEditorHotkeys
+
+    static let defaultEditorHotkeys: [String: String] = [
+        "arrow": "1", "rect": "2", "circle": "3", "text": "4",
+        "blur": "5", "highlight": "6", "freehand": "7", "stepNumber": "8",
+        "mosaic": "9", "emoji": "0", "line": "l", "eraser": "x",
+        "eyedropper": "i", "crop": "k", "ruler": "-", "spotlight": "o",
+        "curvedArrow": "⇧1", "smartHighlight": "⇧6", "magnifierCallout": "⇧3",
+    ]
 
     var expandedSavePath: String {
         (savePath as NSString).expandingTildeInPath
@@ -180,7 +189,6 @@ final class Preferences: ObservableObject {
         savePath = decoded.savePath
         filePrefix = decoded.filePrefix ?? "Cropit_"
         useSmartFilenames = decoded.useSmartFilenames ?? true
-        settingsAdvancedMode = decoded.settingsAdvancedMode ?? false
         afterCaptureAction = decoded.afterCaptureAction
         autoDismissDelay = decoded.autoDismissDelay
         autoCopyToClipboard = decoded.autoCopyToClipboard
@@ -220,6 +228,7 @@ final class Preferences: ObservableObject {
         showFloatingThumbnail = decoded.showFloatingThumbnail
         dimSelectionOverlay = decoded.dimSelectionOverlay
         directCapture = decoded.directCapture ?? true
+        editorHotkeys = decoded.editorHotkeys ?? Preferences.defaultEditorHotkeys
 
         // One-time migration: the selection overlay is now minimal by default
         // (no dim / magnifier / crosshair). Apply that once to existing installs.
@@ -239,7 +248,6 @@ final class Preferences: ObservableObject {
             savePath: savePath,
             filePrefix: filePrefix,
             useSmartFilenames: useSmartFilenames,
-            settingsAdvancedMode: settingsAdvancedMode,
             overlayMinimalApplied: overlayMinimalApplied,
             afterCaptureAction: afterCaptureAction,
             autoDismissDelay: autoDismissDelay,
@@ -271,7 +279,8 @@ final class Preferences: ObservableObject {
             windowCaptureShadow: windowCaptureShadow,
             showFloatingThumbnail: showFloatingThumbnail,
             dimSelectionOverlay: dimSelectionOverlay,
-            directCapture: directCapture
+            directCapture: directCapture,
+            editorHotkeys: editorHotkeys
         )
         guard let data = try? JSONEncoder().encode(storage) else { return }
         UserDefaults.standard.set(data, forKey: Self.defaultsKey)
@@ -283,7 +292,6 @@ final class Preferences: ObservableObject {
         var savePath: String
         var filePrefix: String?          // optional for backward compatibility
         var useSmartFilenames: Bool?     // optional for backward compatibility
-        var settingsAdvancedMode: Bool?  // optional for backward compatibility
         var overlayMinimalApplied: Bool? // optional for backward compatibility
         var afterCaptureAction: AfterCaptureAction
         var autoDismissDelay: TimeInterval
@@ -315,6 +323,7 @@ final class Preferences: ObservableObject {
         var windowCaptureShadow: Bool
         var showFloatingThumbnail: Bool
         var dimSelectionOverlay: Bool
-        var directCapture: Bool?         // optional for backward compatibility
+        var directCapture: Bool?              // optional for backward compatibility
+        var editorHotkeys: [String: String]?  // optional for backward compatibility
     }
 }
