@@ -94,12 +94,7 @@ final class MediaCaptureSource: CaptureSource {
                 guard let self = self else { return }
                 // Close the HUD right away — don't wait for encoding.
                 hudBox.value?.close()
-                Task { @MainActor in
-                    self.stopRequested = true
-                    _ = await self.recorder.stopCapture()
-                    self.stopContinuation?.resume()
-                    self.stopContinuation = nil
-                }
+                requestStop()
             }
         )
         hudBox.value = hud
