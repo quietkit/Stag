@@ -15,11 +15,11 @@ final class EditorWindow: NSWindow, NSWindowDelegate {
         minSize = NSSize(width: 400, height: 300)
         contentView = NSHostingView(rootView: EditorView(image: image, window: self, filePath: filePath))
         delegate = self
-        self.center()
     }
 
     func show() {
         WindowLifecycle.didOpen(self)
+        center()
     }
 
     // ESC closes the editor without saving

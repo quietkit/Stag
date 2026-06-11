@@ -92,7 +92,7 @@ private final class CountdownView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
-        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.08))
+        ctx.setFillColor(Palette.dimOverlayHeavy)
         ctx.fill(dirtyRect)
 
         guard current > 0 else { return }

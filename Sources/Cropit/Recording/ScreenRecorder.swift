@@ -22,12 +22,13 @@ struct RecordingConfig {
 
     static func from(preferences: Preferences, targetSize: CGSize, captureRect: CGRect? = nil) -> RecordingConfig {
         let quality = preferences.recordingQuality
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
         let bitRate: Int = {
-            let pixels = Int(targetSize.width * targetSize.height)
+            let pixelCount = Int(targetSize.width * scale * targetSize.height * scale)
             switch quality {
-            case .low:    return pixels * 2
-            case .medium: return pixels * 4
-            case .high:   return pixels * 8
+            case .low:    return pixelCount * 2
+            case .medium: return pixelCount * 4
+            case .high:   return pixelCount * 8
             }
         }()
         return RecordingConfig(
@@ -87,8 +88,10 @@ final class ScreenRecorder: NSObject, CaptureRecorder, ObservableObject, @unchec
         self.config = config
 
         let streamConfig = SCStreamConfiguration()
-        streamConfig.width = Int(config.outputSize.width)
-        streamConfig.height = Int(config.outputSize.height)
+        // outputSize is in logical points; stream config expects physical pixels.
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        streamConfig.width = max(1, Int(config.outputSize.width * scale))
+        streamConfig.height = max(1, Int(config.outputSize.height * scale))
         streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(config.fps))
         streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
         streamConfig.capturesAudio = config.captureSystemAudio
@@ -177,12 +180,15 @@ final class ScreenRecorder: NSObject, CaptureRecorder, ObservableObject, @unchec
     // MARK: - Asset Writer
 
     private func setupAssetWriter(config: RecordingConfig) throws {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let pixelW = max(1, Int(config.outputSize.width  * scale))
+        let pixelH = max(1, Int(config.outputSize.height * scale))
         assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: config.outputSize.width,
-            AVVideoHeightKey: config.outputSize.height,
+            AVVideoWidthKey: pixelW,
+            AVVideoHeightKey: pixelH,
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey: config.bitRate,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
