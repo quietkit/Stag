@@ -24,7 +24,6 @@ struct SelectionOverlayView: View {
     @State private var hovering = false
     @State private var mouseLocation: CGPoint = .zero
     @State private var hexColor: String?
-    @State private var highlightedWindow: WindowHit?
     @State private var keyMonitor: Any?
 
     private let handleTolerance: CGFloat = 16
@@ -32,10 +31,6 @@ struct SelectionOverlayView: View {
 
     private var bounds: CGSize { CGSize(width: screenFrame.width, height: screenFrame.height) }
     private var active: Bool { phase != .idle && selection != nil }
-
-    private func windowHit(at p: CGPoint) -> WindowHit? {
-        detectedWindows.first { $0.rect.contains(p) }
-    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -46,7 +41,6 @@ struct SelectionOverlayView: View {
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
             dimmingOverlay
-            windowHighlight
             crosshairGuides
             selectionVisuals
             magnifierOverlay
@@ -57,10 +51,8 @@ struct SelectionOverlayView: View {
             case .active(let p):
                 mouseLocation = p
                 hovering = true
-                if !active { highlightedWindow = windowHit(at: p) }
             case .ended:
                 hovering = false
-                highlightedWindow = nil
             }
         }
         .onAppear(perform: installKeyMonitor)
@@ -79,7 +71,6 @@ struct SelectionOverlayView: View {
                     drawStart = value.startLocation
                     phase = .drawing
                     selection = makeRect(value.startLocation, value.location)
-                    highlightedWindow = nil
                 case .drawing:
                     selection = makeRect(drawStart ?? value.startLocation, value.location)
                 case .adjusting:
@@ -117,8 +108,6 @@ struct SelectionOverlayView: View {
                     if let sel = selection, sel.width >= minSize, sel.height >= minSize {
                         selection = clamp(sel)
                         phase = .adjusting              // refine before capturing
-                    } else if let win = windowHit(at: value.location) {
-                        onCapture(win.rect)             // click → capture that window
                     } else {
                         selection = nil
                         phase = .idle                   // stray click: stay in overlay
@@ -261,32 +250,6 @@ struct SelectionOverlayView: View {
             }
         } else if dimOverlay {
             Color.black.opacity(0.28).allowsHitTesting(false)
-        }
-    }
-
-    @ViewBuilder
-    private var windowHighlight: some View {
-        if !active, let win = highlightedWindow {
-            ZStack(alignment: .topLeading) {
-                // Border-only highlight — no fill, so hovering a full-screen window
-                // doesn't tint the whole screen.
-                RoundedRectangle(cornerRadius: 5)
-                    .stroke(Color.accentColor, lineWidth: 2.5)
-                    .frame(width: win.rect.width, height: win.rect.height)
-                    .position(x: win.rect.midX, y: win.rect.midY)
-                if !win.title.isEmpty {
-                    Text(win.title)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Color.accentColor)
-                        .clipShape(Capsule())
-                        .position(x: win.rect.midX, y: max(win.rect.minY + 14, 14))
-                }
-            }
-            .allowsHitTesting(false)
-            .transition(.opacity)
         }
     }
 
