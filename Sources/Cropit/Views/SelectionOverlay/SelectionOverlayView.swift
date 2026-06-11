@@ -250,8 +250,6 @@ struct SelectionOverlayView: View {
 
     // MARK: - Layers
 
-    // dim ON → darken outside the selection (crisp selection); dim OFF → minimal,
-    // lightly dim the selection itself and keep the screen bright.
     @ViewBuilder
     private var dimmingOverlay: some View {
         let full = bounds
@@ -262,8 +260,9 @@ struct SelectionOverlayView: View {
                 .frame(width: full.width, height: full.height)
                 .allowsHitTesting(false)
         }
-        if let rect = selection, active {
-            if dimOverlay {
+        if dimOverlay {
+            if let rect = selection, active {
+                // Dim outside the selection only
                 Path { p in
                     p.addRect(CGRect(origin: .zero, size: full))
                     p.addRect(rect)
@@ -271,15 +270,11 @@ struct SelectionOverlayView: View {
                 .fill(Color.black.opacity(0.25), style: FillStyle(eoFill: true))
                 .allowsHitTesting(false)
             } else {
-                Rectangle()
-                    .fill(Color.black.opacity(0.12))
-                    .frame(width: rect.width, height: rect.height)
-                    .position(x: rect.midX, y: rect.midY)
-                    .allowsHitTesting(false)
+                // No selection yet — dim entire screen
+                Color.black.opacity(0.15).allowsHitTesting(false)
             }
-        } else if dimOverlay {
-            Color.black.opacity(0.15).allowsHitTesting(false)
         }
+        // dim OFF → no dimming at all, ever
     }
 
     @ViewBuilder
@@ -294,15 +289,10 @@ struct SelectionOverlayView: View {
     @ViewBuilder
     private var selectionVisuals: some View {
         if let rect = selection, active {
-            if dimOverlay {
-                SelectionRectBorder(rect: rect)
-                DimensionLabel(size: CGSize(width: rect.width, height: rect.height),
-                               rect: rect, bounds: bounds)
-            } else {
-                MinimalSelectionBorder(rect: rect)
-                MinimalSizeLabel(size: CGSize(width: rect.width, height: rect.height),
-                                 at: mouseLocation, bounds: bounds)
-            }
+            // Blue border + size label in all modes
+            BlueBorderSelectionRect(rect: rect)
+            DimensionLabel(size: CGSize(width: rect.width, height: rect.height),
+                           rect: rect, bounds: bounds)
             if phase == .adjusting {
                 SelectionHandles(points: handlePoints(rect).map { $0.1 })
             }
@@ -380,13 +370,16 @@ struct SelectionHandles: View {
 
 /// Thin selection outline for minimal (dim-off) mode — no corner brackets.
 /// Double-stroked so it reads on both light and dark backgrounds.
-struct MinimalSelectionBorder: View {
+struct BlueBorderSelectionRect: View {
     let rect: CGRect
     var body: some View {
         Canvas { ctx, _ in
-            let p = Path(rect)
-            ctx.stroke(p, with: .color(.black.opacity(0.45)), style: StrokeStyle(lineWidth: 1.5))
-            ctx.stroke(p, with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: 0.75))
+            let inset = rect.insetBy(dx: 0.5, dy: 0.5)
+            let p = Path(inset)
+            // Thin shadow outline for contrast on any background
+            ctx.stroke(p, with: .color(.black.opacity(0.3)), style: StrokeStyle(lineWidth: 2.5))
+            // Vivid blue border
+            ctx.stroke(p, with: .color(Color.accentColor), style: StrokeStyle(lineWidth: 1.5))
         }
         .allowsHitTesting(false)
     }
@@ -479,37 +472,7 @@ struct MagnifierHUD: View {
     }
 }
 
-struct SelectionRectBorder: View {
-    let rect: CGRect
-
-    var body: some View {
-        Canvas { ctx, _ in
-            // Double-stroked border: dark outline → white fill.
-            let border = Path(rect)
-            ctx.stroke(border, with: .color(.black.opacity(0.5)), style: StrokeStyle(lineWidth: 3))
-            ctx.stroke(border, with: .color(.white), style: StrokeStyle(lineWidth: 1.5))
-
-            let arm: CGFloat = 16
-            let corners: [(CGPoint, CGFloat, CGFloat)] = [
-                (CGPoint(x: rect.minX, y: rect.minY),  arm,  arm),
-                (CGPoint(x: rect.maxX, y: rect.minY), -arm,  arm),
-                (CGPoint(x: rect.minX, y: rect.maxY),  arm, -arm),
-                (CGPoint(x: rect.maxX, y: rect.maxY), -arm, -arm),
-            ]
-            for (p, dx, dy) in corners {
-                var bracket = Path()
-                bracket.move(to: CGPoint(x: p.x + dx, y: p.y))
-                bracket.addLine(to: p)
-                bracket.addLine(to: CGPoint(x: p.x, y: p.y + dy))
-                ctx.stroke(bracket, with: .color(.black.opacity(0.5)),
-                           style: StrokeStyle(lineWidth: 4.5, lineCap: .square))
-                ctx.stroke(bracket, with: .color(.white),
-                           style: StrokeStyle(lineWidth: 2.5, lineCap: .square))
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
+// SelectionRectBorder removed — BlueBorderSelectionRect is used in all modes
 
 /// Size badge pinned to the selection's top-left, clamped on-screen.
 struct DimensionLabel: View {
