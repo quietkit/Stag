@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SelectionOverlayView: View {
     let screenFrame: NSRect
@@ -6,88 +7,251 @@ struct SelectionOverlayView: View {
     var sampleImage: CGImage?      // clean source the loupe samples for true colors
     let onCapture: (CGRect) -> Void
     let onCancel: () -> Void
-    var dimOverlay: Bool = true   // false = Shottr "no-overlay" mode (transparent background)
+    var dimOverlay: Bool = true   // false = Shottr "no-overlay" minimal mode
     var showMagnifier: Bool = true
     var detectedWindows: [WindowHit] = []
 
-    @State private var dragStart: CGPoint?
-    @State private var dragCurrent: CGPoint?
-    @State private var isDragging = false
+    private enum Phase { case idle, drawing, adjusting }
+    private enum Handle { case tl, tr, bl, br, top, bottom, left, right, inside }
+
+    @State private var phase: Phase = .idle
+    @State private var selection: CGRect?
+    @State private var drawStart: CGPoint?
+    @State private var activeHandle: Handle?
+    @State private var dragOrigin: CGRect?
+    @State private var dragStartPoint: CGPoint?
     @State private var hovering = false
     @State private var mouseLocation: CGPoint = .zero
     @State private var hexColor: String?
     @State private var highlightedWindow: WindowHit?
+    @State private var keyMonitor: Any?
 
-    /// Topmost detected window under a point (list is front-to-back).
+    private let handleTolerance: CGFloat = 16
+    private let minSize: CGFloat = 8
+
+    private var bounds: CGSize { CGSize(width: screenFrame.width, height: screenFrame.height) }
+    private var active: Bool { phase != .idle && selection != nil }
+
     private func windowHit(at p: CGPoint) -> WindowHit? {
         detectedWindows.first { $0.rect.contains(p) }
     }
 
-    private var selectionRect: CGRect? {
-        guard let s = dragStart, let c = dragCurrent else { return nil }
-        return CGRect(
-            x: min(s.x, c.x), y: min(s.y, c.y),
-            width: abs(c.x - s.x), height: abs(c.y - s.y)
-        )
-    }
-
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                // Invisible base layer — guarantees the ZStack is always hit-testable,
-                // even in no-dim mode where all other layers are transparent.
-                Color.white.opacity(0.001)
-                dimmingOverlay
-                windowHighlight
-                crosshairGuides
-                selectionOverlay
-                magnifierOverlay
-            }
-            .contentShape(Rectangle())
-            .gesture(dragGesture)
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let p):
-                    mouseLocation = p
-                    hovering = true
-                    if !isDragging { highlightedWindow = windowHit(at: p) }
-                case .ended:
-                    hovering = false
-                    highlightedWindow = nil
-                }
+        ZStack(alignment: .topLeading) {
+            // Drag lives on the base layer only, so the action-bar buttons (on top,
+            // hit-testable) reliably receive clicks while dragging still works
+            // everywhere else (the visual layers are allowsHitTesting(false)).
+            Color.white.opacity(0.001)
+                .contentShape(Rectangle())
+                .gesture(dragGesture)
+            dimmingOverlay
+            windowHighlight
+            crosshairGuides
+            selectionVisuals
+            magnifierOverlay
+            actionBar
+        }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let p):
+                mouseLocation = p
+                hovering = true
+                if !active { highlightedWindow = windowHit(at: p) }
+            case .ended:
+                hovering = false
+                highlightedWindow = nil
             }
         }
+        .onAppear(perform: installKeyMonitor)
+        .onDisappear(perform: removeKeyMonitor)
         .edgesIgnoringSafeArea(.all)
     }
 
-    // Two distinct modes:
-    //  • dim ON  → darken everything OUTSIDE the selection (selection stays crisp),
-    //              with crosshair guides + loupe (the rich mode).
-    //  • dim OFF → minimal: leave the screen bright and lightly dim the SELECTION
-    //              itself; no guides, no loupe.
+    // MARK: - Gesture
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                mouseLocation = value.location
+                switch phase {
+                case .idle:
+                    drawStart = value.startLocation
+                    phase = .drawing
+                    selection = makeRect(value.startLocation, value.location)
+                    highlightedWindow = nil
+                case .drawing:
+                    selection = makeRect(drawStart ?? value.startLocation, value.location)
+                case .adjusting:
+                    guard let sel = selection else { return }
+                    if activeHandle == nil {
+                        // Let the action bar's buttons handle their own clicks.
+                        if actionBarRect(for: sel).contains(value.startLocation) { return }
+                        if let h = handleHit(at: value.startLocation, rect: sel) {
+                            activeHandle = h
+                        } else if sel.contains(value.startLocation) {
+                            activeHandle = .inside
+                        } else {
+                            // Started outside the selection → draw a fresh one.
+                            phase = .drawing
+                            drawStart = value.startLocation
+                            selection = makeRect(value.startLocation, value.location)
+                            return
+                        }
+                        dragOrigin = sel
+                        dragStartPoint = value.startLocation
+                    }
+                    guard let origin = dragOrigin, let handle = activeHandle else { return }
+                    if handle == .inside {
+                        let dx = value.location.x - (dragStartPoint?.x ?? value.location.x)
+                        let dy = value.location.y - (dragStartPoint?.y ?? value.location.y)
+                        selection = clamp(origin.offsetBy(dx: dx, dy: dy))
+                    } else {
+                        selection = resize(origin, handle: handle, to: value.location)
+                    }
+                }
+            }
+            .onEnded { value in
+                switch phase {
+                case .drawing:
+                    if let sel = selection, sel.width >= minSize, sel.height >= minSize {
+                        selection = clamp(sel)
+                        phase = .adjusting              // refine before capturing
+                    } else if let win = windowHit(at: value.location) {
+                        onCapture(win.rect)             // click → capture that window
+                    } else {
+                        selection = nil
+                        phase = .idle                   // stray click: stay in overlay
+                    }
+                case .adjusting:
+                    activeHandle = nil
+                    dragOrigin = nil
+                    dragStartPoint = nil
+                case .idle:
+                    break
+                }
+            }
+    }
+
+    private func confirm() {
+        guard let sel = selection, sel.width >= minSize, sel.height >= minSize else { return }
+        onCapture(sel)
+    }
+
+    // MARK: - Keyboard (arrows nudge, ⏎ confirm, esc cancel)
+
+    private func installKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            switch event.keyCode {
+            case 53:                       // Esc
+                onCancel(); return nil
+            case 36, 76:                   // Return / keypad Enter
+                confirm(); return nil
+            case 123, 124, 125, 126:       // ← → ↓ ↑
+                guard phase == .adjusting, var sel = selection else { return event }
+                let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
+                switch event.keyCode {
+                case 123: sel.origin.x -= step
+                case 124: sel.origin.x += step
+                case 125: sel.origin.y += step
+                case 126: sel.origin.y -= step
+                default: break
+                }
+                selection = clamp(sel)
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
+    }
+
+    // MARK: - Geometry helpers
+
+    private func makeRect(_ a: CGPoint, _ b: CGPoint) -> CGRect {
+        CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+    }
+
+    private func clamp(_ r: CGRect) -> CGRect {
+        var rect = r
+        rect.size.width = min(rect.width, bounds.width)
+        rect.size.height = min(rect.height, bounds.height)
+        rect.origin.x = min(max(0, rect.origin.x), bounds.width - rect.width)
+        rect.origin.y = min(max(0, rect.origin.y), bounds.height - rect.height)
+        return rect
+    }
+
+    private func resize(_ r: CGRect, handle: Handle, to p: CGPoint) -> CGRect {
+        var minX = r.minX, minY = r.minY, maxX = r.maxX, maxY = r.maxY
+        let px = min(max(0, p.x), bounds.width)
+        let py = min(max(0, p.y), bounds.height)
+        switch handle {
+        case .tl:     minX = px; minY = py
+        case .tr:     maxX = px; minY = py
+        case .bl:     minX = px; maxY = py
+        case .br:     maxX = px; maxY = py
+        case .top:    minY = py
+        case .bottom: maxY = py
+        case .left:   minX = px
+        case .right:  maxX = px
+        case .inside: break
+        }
+        return CGRect(x: min(minX, maxX), y: min(minY, maxY),
+                      width: abs(maxX - minX), height: abs(maxY - minY))
+    }
+
+    private func handlePoints(_ r: CGRect) -> [(Handle, CGPoint)] {
+        [(.tl, CGPoint(x: r.minX, y: r.minY)),
+         (.tr, CGPoint(x: r.maxX, y: r.minY)),
+         (.bl, CGPoint(x: r.minX, y: r.maxY)),
+         (.br, CGPoint(x: r.maxX, y: r.maxY)),
+         (.top, CGPoint(x: r.midX, y: r.minY)),
+         (.bottom, CGPoint(x: r.midX, y: r.maxY)),
+         (.left, CGPoint(x: r.minX, y: r.midY)),
+         (.right, CGPoint(x: r.maxX, y: r.midY))]
+    }
+
+    private func handleHit(at p: CGPoint, rect: CGRect) -> Handle? {
+        for (h, c) in handlePoints(rect) where hypot(p.x - c.x, p.y - c.y) <= handleTolerance {
+            return h
+        }
+        return nil
+    }
+
+    private func actionBarRect(for r: CGRect) -> CGRect {
+        let w: CGFloat = 188, h: CGFloat = 40, gap: CGFloat = 14
+        var y = r.maxY + gap + h / 2
+        if y + h / 2 > bounds.height { y = r.minY - gap - h / 2 }   // flip above
+        y = min(max(h / 2 + 4, y), bounds.height - h / 2 - 4)
+        let x = min(max(w / 2 + 4, r.midX), bounds.width - w / 2 - 4)
+        return CGRect(x: x - w / 2, y: y - h / 2, width: w, height: h)
+    }
+
+    // MARK: - Layers
+
+    // dim ON → darken outside the selection (crisp selection); dim OFF → minimal,
+    // lightly dim the selection itself and keep the screen bright.
     @ViewBuilder
     private var dimmingOverlay: some View {
-        let fullSize = CGSize(width: screenFrame.width, height: screenFrame.height)
-
+        let full = bounds
         if let img = frozenImage {
             Image(img, scale: 1, label: Text(""))
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: screenFrame.width, height: screenFrame.height)
+                .frame(width: full.width, height: full.height)
                 .allowsHitTesting(false)
         }
-
-        if let rect = selectionRect, isDragging {
+        if let rect = selection, active {
             if dimOverlay {
-                // Dim everything except the selection (even-odd cut-out).
                 Path { p in
-                    p.addRect(CGRect(origin: .zero, size: fullSize))
+                    p.addRect(CGRect(origin: .zero, size: full))
                     p.addRect(rect)
                 }
                 .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
                 .allowsHitTesting(false)
             } else {
-                // Minimal: lightly dim the selected region; surroundings stay bright.
                 Rectangle()
                     .fill(Color.black.opacity(0.20))
                     .frame(width: rect.width, height: rect.height)
@@ -95,26 +259,19 @@ struct SelectionOverlayView: View {
                     .allowsHitTesting(false)
             }
         } else if dimOverlay {
-            // Pre-drag, dim-on: a soft veil so the cursor/loupe read clearly.
-            Color.black.opacity(0.28)
-                .allowsHitTesting(false)
+            Color.black.opacity(0.28).allowsHitTesting(false)
         }
     }
 
-    // Highlight the window under the cursor before a drag begins. Click captures it.
     @ViewBuilder
     private var windowHighlight: some View {
-        if !isDragging, let win = highlightedWindow {
+        if !active, let win = highlightedWindow {
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 5)
                     .fill(Color.accentColor.opacity(0.12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5)
-                            .stroke(Color.accentColor, lineWidth: 2)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.accentColor, lineWidth: 2))
                     .frame(width: win.rect.width, height: win.rect.height)
                     .position(x: win.rect.midX, y: win.rect.midY)
-
                 if !win.title.isEmpty {
                     Text(win.title)
                         .font(.system(size: 11, weight: .medium))
@@ -123,8 +280,7 @@ struct SelectionOverlayView: View {
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(Color.accentColor)
                         .clipShape(Capsule())
-                        .position(x: win.rect.midX,
-                                  y: max(win.rect.minY + 14, 14))
+                        .position(x: win.rect.midX, y: max(win.rect.minY + 14, 14))
                 }
             }
             .allowsHitTesting(false)
@@ -132,68 +288,74 @@ struct SelectionOverlayView: View {
         }
     }
 
-    // Full-screen alignment guides — only in the rich (dim-on) mode.
     @ViewBuilder
     private var crosshairGuides: some View {
-        if dimOverlay && (hovering || isDragging) {
-            CrosshairGuides(at: mouseLocation,
-                            size: CGSize(width: screenFrame.width, height: screenFrame.height))
+        if dimOverlay && (hovering || phase == .drawing) {
+            CrosshairGuides(at: mouseLocation, size: bounds)
         }
     }
 
     @ViewBuilder
-    private var selectionOverlay: some View {
-        if let rect = selectionRect, isDragging {
+    private var selectionVisuals: some View {
+        if let rect = selection, active {
             if dimOverlay {
                 SelectionRectBorder(rect: rect)
-                DimensionLabel(
-                    size: CGSize(width: rect.width, height: rect.height),
-                    rect: rect,
-                    bounds: CGSize(width: screenFrame.width, height: screenFrame.height)
-                )
+                DimensionLabel(size: CGSize(width: rect.width, height: rect.height),
+                               rect: rect, bounds: bounds)
             } else {
-                // Minimal mode: thin border + a small size readout near the cursor.
                 MinimalSelectionBorder(rect: rect)
-                MinimalSizeLabel(
-                    size: CGSize(width: rect.width, height: rect.height),
-                    at: mouseLocation,
-                    bounds: CGSize(width: screenFrame.width, height: screenFrame.height)
-                )
+                MinimalSizeLabel(size: CGSize(width: rect.width, height: rect.height),
+                                 at: mouseLocation, bounds: bounds)
+            }
+            if phase == .adjusting {
+                SelectionHandles(points: handlePoints(rect).map { $0.1 })
             }
         }
     }
 
     @ViewBuilder
     private var magnifierOverlay: some View {
-        // The loupe belongs to the rich (dim-on) mode only.
-        if dimOverlay && showMagnifier && (hovering || isDragging) {
+        if dimOverlay && showMagnifier && (hovering || phase == .drawing) {
             let block = magnifierPlacement()
             VStack(spacing: 6) {
-                MagnifierView(
-                    viewPoint: mouseLocation,
-                    screenFrame: screenFrame,
-                    frozenImage: sampleImage,
-                    hexColor: $hexColor
-                )
-                .frame(width: 118, height: 118)
-
-                MagnifierHUD(
-                    hex: hexColor,
-                    point: mouseLocation,
-                    selection: selectionRect
-                )
+                MagnifierView(viewPoint: mouseLocation, screenFrame: screenFrame,
+                              frozenImage: sampleImage, hexColor: $hexColor)
+                    .frame(width: 118, height: 118)
+                MagnifierHUD(hex: hexColor, point: mouseLocation, selection: selection)
             }
             .position(x: block.x, y: block.y)
             .allowsHitTesting(false)
         }
     }
 
-    /// Keeps the loupe + HUD fully on-screen, preferring the upper-right of the
-    /// cursor and flipping near the right/top edges.
+    @ViewBuilder
+    private var actionBar: some View {
+        if phase == .adjusting, let rect = selection {
+            let bar = actionBarRect(for: rect)
+            HStack(spacing: 8) {
+                Button(action: confirm) {
+                    Label("Capture", systemImage: "camera.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(action: onCancel) {
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+            .frame(width: bar.width, height: bar.height)
+            .position(x: bar.midX, y: bar.midY)
+        }
+    }
+
     private func magnifierPlacement() -> CGPoint {
-        let blockW: CGFloat = 130
-        let blockH: CGFloat = 170
-        let gap: CGFloat = 26
+        let blockW: CGFloat = 130, blockH: CGFloat = 170, gap: CGFloat = 26
         var cx = mouseLocation.x + gap + blockW / 2
         if cx + blockW / 2 > screenFrame.width { cx = mouseLocation.x - gap - blockW / 2 }
         var cy = mouseLocation.y - gap - blockH / 2
@@ -202,37 +364,20 @@ struct SelectionOverlayView: View {
         cy = min(max(cy, blockH / 2 + 4), screenFrame.height - blockH / 2 - 4)
         return CGPoint(x: cx, y: cy)
     }
+}
 
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if !isDragging {
-                    dragStart = value.startLocation
-                    isDragging = true
-                }
-                dragCurrent = value.location
-                mouseLocation = value.location
-                // Past a few points of movement it's a freeform drag, not a click —
-                // drop the window highlight so the two modes don't fight.
-                let moved = hypot(value.translation.width, value.translation.height)
-                if moved > 6 { highlightedWindow = nil }
+/// Eight resize handles drawn on the selection during the adjust phase.
+struct SelectionHandles: View {
+    let points: [CGPoint]
+    var body: some View {
+        Canvas { ctx, _ in
+            for c in points {
+                let r = CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)
+                ctx.fill(Path(ellipseIn: r), with: .color(.white))
+                ctx.stroke(Path(ellipseIn: r), with: .color(.black.opacity(0.55)), lineWidth: 1)
             }
-            .onEnded { value in
-                defer { isDragging = false }
-                guard let start = dragStart else { return }
-                let end = value.location
-                let rect = CGRect(
-                    x: min(start.x, end.x), y: min(start.y, end.y),
-                    width: abs(end.x - start.x), height: abs(end.y - start.y)
-                )
-                if rect.width > 3 && rect.height > 3 {
-                    onCapture(rect)                       // freeform area
-                } else if let win = windowHit(at: end) {
-                    onCapture(win.rect)                    // click → capture that window
-                } else {
-                    onCancel()
-                }
-            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -343,20 +488,16 @@ struct SelectionRectBorder: View {
     var body: some View {
         Canvas { ctx, _ in
             // Double-stroked border: dark outline → white fill.
-            // Readable on any background (bright or dark screen content).
             let border = Path(rect)
-            ctx.stroke(border, with: .color(.black.opacity(0.5)),
-                       style: StrokeStyle(lineWidth: 3))
-            ctx.stroke(border, with: .color(.white),
-                       style: StrokeStyle(lineWidth: 1.5))
+            ctx.stroke(border, with: .color(.black.opacity(0.5)), style: StrokeStyle(lineWidth: 3))
+            ctx.stroke(border, with: .color(.white), style: StrokeStyle(lineWidth: 1.5))
 
-            // L-shaped corner brackets — same double-stroke treatment
-            let arm:  CGFloat = 16
+            let arm: CGFloat = 16
             let corners: [(CGPoint, CGFloat, CGFloat)] = [
-                (CGPoint(x: rect.minX, y: rect.minY),  arm,  arm),   // ↘
-                (CGPoint(x: rect.maxX, y: rect.minY), -arm,  arm),   // ↙
-                (CGPoint(x: rect.minX, y: rect.maxY),  arm, -arm),   // ↗
-                (CGPoint(x: rect.maxX, y: rect.maxY), -arm, -arm),   // ↖
+                (CGPoint(x: rect.minX, y: rect.minY),  arm,  arm),
+                (CGPoint(x: rect.maxX, y: rect.minY), -arm,  arm),
+                (CGPoint(x: rect.minX, y: rect.maxY),  arm, -arm),
+                (CGPoint(x: rect.maxX, y: rect.maxY), -arm, -arm),
             ]
             for (p, dx, dy) in corners {
                 var bracket = Path()
@@ -373,9 +514,7 @@ struct SelectionRectBorder: View {
     }
 }
 
-/// Size badge pinned to the selection's top-left. Sits just above the selection,
-/// flips inside when the selection hugs the top edge, and clamps within the
-/// screen so it can never be cut off.
+/// Size badge pinned to the selection's top-left, clamped on-screen.
 struct DimensionLabel: View {
     let size: CGSize
     let rect: CGRect
@@ -397,7 +536,6 @@ struct DimensionLabel: View {
     }
 
     private var badgePosition: CGPoint {
-        // Prefer just above the top edge; flip below the top edge if no room.
         let above = rect.minY - badgeHeight / 2 - 4
         let y = above < 8 ? rect.minY + badgeHeight / 2 + 4 : above
         var x = rect.minX + estWidth / 2
