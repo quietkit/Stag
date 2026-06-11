@@ -9,6 +9,7 @@ final class CaptureCursorManager {
     private var cursor: NSCursor?
     private var activationObserver: Any?
     private var eventMonitor: Any?
+    private var cursorTimer: Timer?
 
     private init() {
         // Listen for app activation to re‑apply the cursor if needed.
@@ -34,12 +35,14 @@ final class CaptureCursorManager {
         cursor?.set()
         NSCursor.setHiddenUntilMouseMoves(false)
         installEventMonitor()
+        startCursorTimer()
     }
 
     /// Remove the custom cursor and restore the system default.
     func remove() {
         guard isActive else { return }
         isActive = false
+        stopCursorTimer()
         removeEventMonitor()
         cursor?.pop()
         cursor = nil
@@ -63,6 +66,21 @@ final class CaptureCursorManager {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
         }
+    }
+
+    private func startCursorTimer() {
+        stopCursorTimer()
+        // Timer constantly re-applies cursor every 50ms while capture is active.
+        // This ensures the cursor stays visible even when moving to other windows.
+        cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard self?.isActive == true else { return }
+            self?.cursor?.set()
+        }
+    }
+
+    private func stopCursorTimer() {
+        cursorTimer?.invalidate()
+        cursorTimer = nil
     }
 
     @objc private func appDidActivate() {
