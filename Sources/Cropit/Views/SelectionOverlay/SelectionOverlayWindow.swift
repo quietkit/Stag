@@ -7,7 +7,9 @@ import ScreenCaptureKit
 // mouseMoved event — no need to manually re-call NSCursor.set().
 private final class CrosshairHostingView<Content: View>: NSHostingView<Content> {
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: SelectionOverlayWindow.precisionCursor)
+        // The capture cursor is managed globally by CaptureCursorManager,
+        // so we just ensure it's active on every cursor rect reset.
+        CaptureCursorManager.shared.apply()
     }
 }
 
@@ -20,58 +22,6 @@ final class SelectionOverlayWindow: NSWindow {
     /// capturing an image (used for screen recording / GIF region selection).
     var onRectSelected: ((CGRect, CGDirectDisplayID) -> Void)?
     private let frozenImage: CGImage?      // visible frozen background (freeze pref)
-
-    // MARK: Precision cursor — scope + crosshair, double-stroked for any background
-    static let precisionCursor: NSCursor = {
-        let size: CGFloat = 44
-        let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let cx = rect.midX, cy = rect.midY
-            let circleR: CGFloat  = 11
-            let gap:     CGFloat  = circleR + 4   // space between circle and arm start
-            let armLen:  CGFloat  = 9
-
-            ctx.setLineCap(.butt)
-
-            // Draw twice: thick dark outline → thin white fill  (readable on any bg)
-            for (lw, r, g, b, a) in [
-                (CGFloat(3.5), CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0.65)),
-                (CGFloat(1.8), CGFloat(1), CGFloat(1), CGFloat(1), CGFloat(1.0 )),
-            ] {
-                ctx.setStrokeColor(CGColor(red: r, green: g, blue: b, alpha: a))
-                ctx.setLineWidth(lw)
-
-                // Scope circle
-                ctx.beginPath()
-                ctx.addEllipse(in: CGRect(x: cx - circleR, y: cy - circleR,
-                                          width: circleR * 2, height: circleR * 2))
-                ctx.strokePath()
-
-                // Four crosshair arms radiating outward from the circle
-                let arms: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
-                    (cx, cy + gap, cx,        cy + gap + armLen),  // up
-                    (cx, cy - gap, cx,        cy - gap - armLen),  // down
-                    (cx + gap, cy, cx + gap + armLen, cy        ),  // right
-                    (cx - gap, cy, cx - gap - armLen, cy        ),  // left
-                ]
-                for (x1, y1, x2, y2) in arms {
-                    ctx.beginPath()
-                    ctx.move(to:    CGPoint(x: x1, y: y1))
-                    ctx.addLine(to: CGPoint(x: x2, y: y2))
-                    ctx.strokePath()
-                }
-            }
-
-            // Centre dot
-            let dotR: CGFloat = 1.8
-            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-            ctx.fillEllipse(in: CGRect(x: cx - dotR, y: cy - dotR, width: dotR*2, height: dotR*2))
-
-            return true
-        }
-        img.isTemplate = false   // keep white/black colours; don't let system tint it
-        return NSCursor(image: img, hotSpot: NSPoint(x: size / 2, y: size / 2))
-    }()
 
     // MARK: Init
 
@@ -120,7 +70,7 @@ final class SelectionOverlayWindow: NSWindow {
             sampleImage: sampleImage ?? frozenImage,
             onCapture: { [weak self] rect in Task { await self?.performCapture(rect) } },
             onCancel:  { [weak self] in
-                Self.precisionCursor.pop()
+                CaptureCursorManager.shared.remove()
                 self?.onCancel?()
                 self?.close()
             },
@@ -143,9 +93,6 @@ final class SelectionOverlayWindow: NSWindow {
         CaptureCursorManager.shared.apply()
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        // Force it visible immediately — without this the cursor only updates on the
-        // first mouse-move, so it looks unchanged until you start dragging.
-        CaptureCursorManager.shared.cursor?.set()
         DispatchQueue.main.async { [weak self] in
             guard let self, let cv = self.contentView else { return }
             self.invalidateCursorRects(for: cv)
@@ -160,7 +107,7 @@ final class SelectionOverlayWindow: NSWindow {
         let windowOriginX = frame.origin.x
         let windowOriginY = frame.origin.y
 
-        Self.precisionCursor.pop()
+        CaptureCursorManager.shared.remove()
         close()
 
         // Convert SwiftUI view coords (y=0 top) → Cocoa screen coords (y=0 bottom)
@@ -238,7 +185,7 @@ final class SelectionOverlayWindow: NSWindow {
     // MARK: ESC / key
 
     override func cancelOperation(_ sender: Any?) {
-        Self.precisionCursor.pop()
+        CaptureCursorManager.shared.remove()
         onCancel?()
         close()
     }

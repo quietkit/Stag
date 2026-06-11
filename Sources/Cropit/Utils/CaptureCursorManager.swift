@@ -40,7 +40,7 @@ final class CaptureCursorManager {
     private static func createCursor() -> NSCursor {
         // Small (12 × 12 pt) circle with thin stroke, suitable for Light/Dark mode.
         let size: CGFloat = 12
-        let img = NSImage(size: NSSize(width: size, height: size)) { rect in
+        let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
             let center = CGPoint(x: rect.midX, y: rect.midY)
             let radius: CGFloat = 5
