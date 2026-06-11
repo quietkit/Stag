@@ -77,9 +77,11 @@ final class SelectionOverlayWindow: NSWindow {
     // MARK: Show / hide
 
     func show() {
-        CaptureCursorManager.shared.apply()
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        // Set the cursor after the window is visible and app is active, so it doesn't
+        // get overridden by the system during app activation.
+        CaptureCursorManager.shared.apply()
         DispatchQueue.main.async { [weak self] in
             guard let self, let cv = self.contentView else { return }
             self.invalidateCursorRects(for: cv)
