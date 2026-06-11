@@ -22,7 +22,10 @@ final class FloatingThumbnailWindow: NSWindow, NSWindowDelegate {
     private var autoDismissWork: DispatchWorkItem?
     private var autoDismissDelay: TimeInterval
 
-    init(autoDismissDelay: TimeInterval = 5, position: ThumbnailPosition = .bottomRight) {
+    private var thumbnailSize: ThumbnailSize
+
+    init(autoDismissDelay: TimeInterval = 5, position: ThumbnailPosition = .bottomRight, thumbnailSize: ThumbnailSize = .medium) {
+        self.thumbnailSize = thumbnailSize
         self.autoDismissDelay = autoDismissDelay
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let startSize = CGSize(width: 240, height: 160)
@@ -95,6 +98,7 @@ final class FloatingThumbnailWindow: NSWindow, NSWindowDelegate {
             image: entry.image,
             index: currentIndex,
             count: entries.count,
+            thumbnailSize: thumbnailSize,
             onAction: { [weak self] action in
                 self?.handleAction(action)
             },

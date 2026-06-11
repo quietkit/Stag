@@ -323,7 +323,7 @@ final class CaptureManager {
         if let existing = thumbnailWindow, existing.isVisible {
             thumbnail = existing
         } else {
-            thumbnail = FloatingThumbnailWindow(autoDismissDelay: prefs.autoDismissDelay, position: prefs.thumbnailPosition)
+            thumbnail = FloatingThumbnailWindow(autoDismissDelay: prefs.autoDismissDelay, position: prefs.thumbnailPosition, thumbnailSize: prefs.thumbnailSize)
             self.thumbnailWindow = thumbnail
         }
 

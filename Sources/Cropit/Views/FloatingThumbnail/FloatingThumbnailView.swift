@@ -9,6 +9,7 @@ struct FloatingThumbnailView: View {
     let image: NSImage
     let index: Int
     let count: Int
+    let thumbnailSize: ThumbnailSize
     let onAction: (ThumbnailAction) -> Void
     let onNavigate: (Int) -> Void
 
@@ -29,7 +30,7 @@ struct FloatingThumbnailView: View {
                     }
                 }
         }
-        .frame(width: thumbnailSize.width, height: thumbnailSize.height)
+        .frame(width: resolvedSize.width, height: resolvedSize.height)
         .onHover { hovering = $0 }
         .animation(.spring(response: 0.25, dampingFraction: 0.85), value: hovering)
         .gesture(
@@ -42,15 +43,15 @@ struct FloatingThumbnailView: View {
         .contextMenu { contextMenu }
     }
 
-    private var thumbnailSize: CGSize {
-        count > 1 ? CGSize(width: 220, height: 145) : CGSize(width: 260, height: 175)
+    private var resolvedSize: CGSize {
+        thumbnailSize.size
     }
 
     private var thumbnailContent: some View {
         Image(nsImage: image)
             .resizable()
             .aspectRatio(contentMode: .fill)
-            .frame(width: thumbnailSize.width, height: thumbnailSize.height)
+            .frame(width: resolvedSize.width, height: resolvedSize.height)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.2), lineWidth: 1))
             .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 6)
