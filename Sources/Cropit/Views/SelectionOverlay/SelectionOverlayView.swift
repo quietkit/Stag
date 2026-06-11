@@ -251,17 +251,17 @@ struct SelectionOverlayView: View {
                     p.addRect(CGRect(origin: .zero, size: full))
                     p.addRect(rect)
                 }
-                .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
+                .fill(Color.black.opacity(0.25), style: FillStyle(eoFill: true))
                 .allowsHitTesting(false)
             } else {
                 Rectangle()
-                    .fill(Color.black.opacity(0.20))
+                    .fill(Color.black.opacity(0.12))
                     .frame(width: rect.width, height: rect.height)
                     .position(x: rect.midX, y: rect.midY)
                     .allowsHitTesting(false)
             }
         } else if dimOverlay {
-            Color.black.opacity(0.28).allowsHitTesting(false)
+            Color.black.opacity(0.15).allowsHitTesting(false)
         }
     }
 
