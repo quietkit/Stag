@@ -64,17 +64,8 @@ struct SelectionOverlayView: View {
             case .active(let p):
                 mouseLocation = p
                 hovering = true
-                // Update cursor based on handle hover
-                if phase == .ended {
-                    NSCursor.arrow.set()
-                } else if let sel = selection, let handle = handleHit(at: p, rect: sel) {
-                    updateCursorForHandle(handle)
-                } else {
-                    NSCursor.arrow.set()
-                }
             case .ended:
                 hovering = false
-                NSCursor.arrow.set()
             }
         }
         .onAppear(perform: installKeyMonitor)

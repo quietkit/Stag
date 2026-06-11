@@ -3,12 +3,19 @@ import SwiftUI
 import ScreenCaptureKit
 
 // MARK: - Crosshair hosting view
-// Overrides resetCursorRects so AppKit keeps the precision cursor on every
-// mouseMoved event — no need to manually re-call NSCursor.set().
+// Manages cursor rects for the capture cursor and resize handles.
 private final class CrosshairHostingView<Content: View>: NSHostingView<Content> {
+    var mouseLocation: CGPoint = .zero
+
     override func resetCursorRects() {
         guard let cursor = CaptureCursorManager.shared.currentCursor else { return }
+        // Default cursor for the whole view
         addCursorRect(bounds, cursor: cursor)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        mouseLocation = convert(event.locationInWindow, from: nil)
+        super.mouseMoved(with: event)
     }
 }
 
