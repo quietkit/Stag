@@ -265,6 +265,11 @@ private struct PreferencesView: View {
                 Toggle("Include window shadow in window capture", isOn: $prefs.windowCaptureShadow)
                     .font(.system(size: 13))
             }
+            Section("Selection Mode") {
+                Toggle("Capture immediately (no resize box)", isOn: $prefs.directCapture)
+                    .font(.system(size: 13))
+                    .help("When enabled, captures immediately after drawing the selection.\nWhen disabled, shows resize handles to fine-tune the selection first.")
+            }
         }
     }
 

@@ -1331,7 +1331,7 @@ struct EditorView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                     }
                     .buttonStyle(.plain)
-                    .help("Bold")
+                    .modernTooltip("Bold")
 
                     // Italic button
                     Button {
@@ -1348,7 +1348,7 @@ struct EditorView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                     }
                     .buttonStyle(.plain)
-                    .help("Italic")
+                    .modernTooltip("Italic")
                 }
             case .blur:
                 HStack(spacing: 4) {
@@ -1501,7 +1501,7 @@ struct EditorView: View {
                 )
         }
         .buttonStyle(.plain)
-        .help(toolHelp(tool))
+        .modernTooltip(toolHelp(tool))
         .scaleEffect(currentTool == tool ? 1.05 : 1.0)
     }
 
@@ -2533,4 +2533,47 @@ final class HoverTrackingView: NSView {
 
 enum HoverPhase {
     case moved(CGPoint)
+}
+
+// MARK: - Modern Tooltip Modifier
+
+extension View {
+    /// Modern tooltip that shows text in a styled label on hover
+    func modernTooltip(_ text: String) -> some View {
+        ModernTooltipWrapper(content: self, text: text)
+    }
+}
+
+private struct ModernTooltipWrapper<Content: View>: View {
+    let content: Content
+    let text: String
+    @State private var isHovering = false
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            content
+                .onHover { hovering in
+                    isHovering = hovering
+                }
+
+            if isHovering {
+                VStack(spacing: 0) {
+                    Text(text)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(nsColor: .darkGray))
+                                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                        )
+                        .offset(y: -36)
+                    Spacer()
+                }
+                .transition(.opacity)
+                .allowsHitTesting(false)
+            }
+        }
+    }
 }
