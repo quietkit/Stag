@@ -5,7 +5,7 @@ final class PreferencesWindow: NSWindow, NSWindowDelegate {
     private let hostingView: NSHostingView<PreferencesView>
 
     init() {
-        let size = NSSize(width: 1000, height: 650)
+        let size = NSSize(width: 1000, height: 680)
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let origin = CGPoint(
             x: screen.frame.midX - size.width / 2,
@@ -23,8 +23,10 @@ final class PreferencesWindow: NSWindow, NSWindowDelegate {
         )
 
         title = "Settings"
+        titlebarAppearsTransparent = true
+        titleVisibility = .hidden
         isReleasedWhenClosed = false
-        minSize = NSSize(width: 800, height: 550)
+        minSize = NSSize(width: 820, height: 560)
         setFrameAutosaveName("PreferencesWindow")
         hostingView.frame = NSRect(origin: .zero, size: size)
         hostingView.autoresizingMask = [.width, .height]
@@ -54,22 +56,17 @@ private struct PreferencesView: View {
     @ObservedObject var prefs: Preferences
     @State private var selectedTab: SettingsTab = .general
 
-    /// All tabs are always shown
-    private var visibleTabs: [SettingsTab] {
-        SettingsTab.allCases
-    }
-
     enum SettingsTab: String, CaseIterable {
         case general, capture, recording, overlays, shortcuts, advanced
 
         var icon: String {
             switch self {
-            case .general:   return "gearshape"
-            case .capture:   return "camera"
-            case .recording: return "video"
+            case .general:   return "gearshape.fill"
+            case .capture:   return "camera.fill"
+            case .recording: return "video.fill"
             case .overlays:  return "square.on.square"
-            case .shortcuts: return "keyboard"
-            case .advanced:  return "wrench"
+            case .shortcuts: return "keyboard.fill"
+            case .advanced:  return "wrench.and.screwdriver.fill"
             }
         }
 
@@ -83,96 +80,140 @@ private struct PreferencesView: View {
             case .advanced:  return "Advanced"
             }
         }
+
+        var tint: Color {
+            switch self {
+            case .general:   return .gray
+            case .capture:   return .blue
+            case .recording: return .red
+            case .overlays:  return .purple
+            case .shortcuts: return .orange
+            case .advanced:  return .teal
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .general:   return "Output format, saving, and after-capture behavior."
+            case .capture:   return "Timer, preparation, and selection behavior."
+            case .recording: return "Video quality, audio, and recording overlays."
+            case .overlays:  return "Webcam picture-in-picture and click effects."
+            case .shortcuts: return "Global hotkeys and editor tool keys."
+            case .advanced:  return "Automation URL scheme and custom upload endpoint."
+            }
+        }
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            // Sidebar — plain VStack, never goes blank
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(visibleTabs, id: \.self) { tab in
-                    sidebarRow(tab)
-                }
-                Spacer()
-            }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .frame(width: 170)
-            .background(Color(nsColor: .controlBackgroundColor))
-
+            sidebar
             Divider()
-
-            // Detail — always shows something
-            ScrollView {
-                detailView
-                    .padding(24)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            detail
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDisappear { prefs.save() }
     }
 
-    private func sidebarRow(_ tab: SettingsTab) -> some View {
-        Button {
-            selectedTab = tab
-        } label: {
-            Label(tab.label, systemImage: tab.icon)
-                .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
-                .foregroundColor(selectedTab == tab ? .white : .primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(selectedTab == tab ? Color.accentColor : Color.clear)
-                )
+    // MARK: Sidebar
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // App header
+            HStack(spacing: 10) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(LinearGradient(colors: [.accentColor, .accentColor.opacity(0.7)],
+                                                 startPoint: .top, endPoint: .bottom))
+                    )
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Cropit")
+                        .font(.system(size: 15, weight: .bold))
+                    Text("Settings")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 40)       // clear the (transparent) titlebar / traffic lights
+            .padding(.bottom, 18)
+
+            ForEach(SettingsTab.allCases, id: \.self) { tab in
+                SidebarItem(
+                    icon: tab.icon,
+                    tint: tab.tint,
+                    label: tab.label,
+                    selected: selectedTab == tab
+                ) { selectedTab = tab }
+            }
+            .padding(.horizontal, 10)
+
+            Spacer()
+
+            Text("Cropit \(appVersion)")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary.opacity(0.7))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
         }
-        .buttonStyle(.plain)
-        .handCursorOnHover()
+        .frame(width: 210)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private var appVersion: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+    }
+
+    // MARK: Detail
+
     @ViewBuilder
-    private var detailView: some View {
-        Group {
-            switch selectedTab {
-            case .general:   generalTab
-            case .capture:   captureTab
-            case .recording: recordingTab
-            case .overlays:  overlaysTab
-            case .shortcuts: shortcutsTab
-            case .advanced:  advancedTab
-            }
+    private var detail: some View {
+        switch selectedTab {
+        case .general:   generalTab
+        case .capture:   captureTab
+        case .recording: recordingTab
+        case .overlays:  overlaysTab
+        case .shortcuts: shortcutsTab
+        case .advanced:  advancedTab
         }
-        .padding(24)
-        .font(.system(size: 12))  // Larger default text
     }
 
     // MARK: General
 
     private var generalTab: some View {
-        Form {
-            Section("Output") {
-                Picker("Format", selection: $prefs.defaultFormat) {
-                    ForEach(CaptureFormat.allCases, id: \.self) { fmt in
-                        Text(fmt.rawValue.uppercased()).tag(fmt)
+        SettingsPage(tab: .general) {
+            SettingsCard(title: "Output") {
+                SettingsRow(title: "Image format") {
+                    Picker("", selection: $prefs.defaultFormat) {
+                        ForEach(CaptureFormat.allCases, id: \.self) { fmt in
+                            Text(fmt.rawValue.uppercased()).tag(fmt)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 160)
                 }
-                .pickerStyle(.segmented)
-
                 if prefs.defaultFormat == .jpeg {
+                    CardDivider()
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Quality: \(Int(prefs.jpegQuality * 100))%").font(.system(size: 13, weight: .semibold))
+                        Text("JPEG quality — \(Int(prefs.jpegQuality * 100))%")
+                            .font(.system(size: 13))
                         Slider(value: $prefs.jpegQuality, in: 0.1...1.0, step: 0.1)
                     }
+                    .settingsRowPadding()
                 }
+            }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Save Location").font(.system(size: 13, weight: .semibold))
+            SettingsCard(title: "Saving") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Save location").font(.system(size: 13))
                     HStack(spacing: 8) {
                         TextField("~/Desktop/Cropit Screenshots", text: $prefs.savePath)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 12, design: .monospaced))
-                            .controlSize(.large)
                         Button("Choose…") {
                             let panel = NSOpenPanel()
                             panel.canChooseDirectories = true
@@ -188,84 +229,87 @@ private struct PreferencesView: View {
                             }
                         }
                         .buttonStyle(.bordered)
-                        .controlSize(.regular)
                     }
                 }
+                .settingsRowPadding()
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("File Prefix").font(.system(size: 13, weight: .semibold))
-                    HStack(spacing: 8) {
-                        TextField("Cropit_", text: $prefs.filePrefix)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12, design: .monospaced))
-                            .frame(maxWidth: 180)
-                            .controlSize(.large)
-                        Text("e.g. \(filenamePreview)")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
+                CardDivider()
+
+                SettingsRow(title: "File prefix", subtitle: "e.g. \(filenamePreview)") {
+                    TextField("Cropit_", text: $prefs.filePrefix)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(width: 150)
                 }
 
-                Toggle("Smart filenames (include the source app)", isOn: $prefs.useSmartFilenames)
-                    .font(.system(size: 13))
-                    .help("Names files after the app you captured, e.g. \"Safari 2026-…\". Falls back to the timestamp when unknown.")
+                CardDivider()
+
+                ToggleRow(title: "Smart filenames",
+                          subtitle: "Include the captured app's name in the filename",
+                          isOn: $prefs.useSmartFilenames)
             }
-            Section("After Capture") {
-                Toggle("Show floating thumbnail", isOn: $prefs.showFloatingThumbnail)
-                    .font(.system(size: 13))
-                    .help("When off, captures are saved/copied immediately with no preview overlay — like Shottr's no-overlay mode.")
-                if prefs.showFloatingThumbnail {
-                    Picker("Action", selection: $prefs.afterCaptureAction) {
-                        ForEach(AfterCaptureAction.allCases, id: \.self) { a in
-                            Text(actionDisplayName(a)).tag(a)
-                        }
-                    }
-                    .pickerStyle(.menu)
 
+            SettingsCard(title: "After Capture") {
+                ToggleRow(title: "Show floating thumbnail",
+                          subtitle: "Preview overlay after each capture; off saves/copies instantly",
+                          isOn: $prefs.showFloatingThumbnail)
+                if prefs.showFloatingThumbnail {
+                    CardDivider()
+                    SettingsRow(title: "Default action") {
+                        Picker("", selection: $prefs.afterCaptureAction) {
+                            ForEach(AfterCaptureAction.allCases, id: \.self) { a in
+                                Text(actionDisplayName(a)).tag(a)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 180)
+                    }
+                    CardDivider()
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Auto-dismiss after \(Int(prefs.autoDismissDelay))s").font(.system(size: 13, weight: .semibold))
+                        Text("Auto-dismiss after \(Int(prefs.autoDismissDelay)) seconds")
+                            .font(.system(size: 13))
                         Slider(value: $prefs.autoDismissDelay, in: 1...30, step: 1)
                     }
-                }
-                Toggle("Auto-copy to clipboard", isOn: $prefs.autoCopyToClipboard)
-                    .font(.system(size: 13))
-                Toggle("Auto-save captures", isOn: $prefs.automaticSave)
-                    .font(.system(size: 13))
-            }
-
-            Section("Thumbnail Position & Size") {
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Position").font(.system(size: 12, weight: .semibold))
+                    .settingsRowPadding()
+                    CardDivider()
+                    SettingsRow(title: "Thumbnail position") {
                         Picker("", selection: $prefs.thumbnailPosition) {
                             ForEach(ThumbnailPosition.allCases, id: \.self) { p in
                                 Text(p.displayName).tag(p)
                             }
                         }
-                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 150)
                     }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Size").font(.system(size: 12, weight: .semibold))
+                    CardDivider()
+                    SettingsRow(title: "Thumbnail size") {
                         Picker("", selection: $prefs.thumbnailSize) {
                             ForEach(ThumbnailSize.allCases, id: \.self) { s in
                                 Text("\(Int(s.size.width))×\(Int(s.size.height))").tag(s)
                             }
                         }
-                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 150)
                     }
                 }
+                CardDivider()
+                ToggleRow(title: "Auto-copy to clipboard", isOn: $prefs.autoCopyToClipboard)
+                CardDivider()
+                ToggleRow(title: "Auto-save captures", isOn: $prefs.automaticSave)
             }
 
-            Section("Selection Overlay") {
-                Toggle("Dim unselected area", isOn: $prefs.dimSelectionOverlay)
-                    .font(.system(size: 13))
-                    .help("When on, darkens the area outside your selection, making it stand out. Off by default for a minimal interface.")
-                Toggle("Show magnifier", isOn: $prefs.showMagnifier)
-                    .font(.system(size: 13))
-                Toggle("Show crosshair", isOn: $prefs.showCrosshair)
-                    .font(.system(size: 13))
+            SettingsCard(title: "Selection Overlay") {
+                ToggleRow(title: "Dim unselected area",
+                          subtitle: "Darken everything outside your selection",
+                          isOn: $prefs.dimSelectionOverlay)
+                CardDivider()
+                ToggleRow(title: "Show magnifier",
+                          subtitle: "Pixel loupe with color readout while selecting",
+                          isOn: $prefs.showMagnifier)
+                CardDivider()
+                ToggleRow(title: "Show crosshair",
+                          subtitle: "Full-screen guide lines that follow the cursor",
+                          isOn: $prefs.showCrosshair)
             }
         }
     }
@@ -273,28 +317,37 @@ private struct PreferencesView: View {
     // MARK: Capture
 
     private var captureTab: some View {
-        Form {
-            Section("Self-Timer") {
-                Picker("Delay", selection: $prefs.captureDelay) {
-                    Text("Off").tag(TimeInterval(0))
-                    Text("3 seconds").tag(TimeInterval(3))
-                    Text("5 seconds").tag(TimeInterval(5))
-                    Text("10 seconds").tag(TimeInterval(10))
+        SettingsPage(tab: .capture) {
+            SettingsCard(title: "Self-Timer") {
+                SettingsRow(title: "Delay before capture") {
+                    Picker("", selection: $prefs.captureDelay) {
+                        Text("Off").tag(TimeInterval(0))
+                        Text("3s").tag(TimeInterval(3))
+                        Text("5s").tag(TimeInterval(5))
+                        Text("10s").tag(TimeInterval(10))
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 200)
                 }
-                .pickerStyle(.segmented)
             }
-            Section("Preparation Options") {
-                Toggle("Hide desktop icons before capture", isOn: $prefs.hideDesktopIcons)
-                    .font(.system(size: 13))
-                Toggle("Freeze screen before area selection", isOn: $prefs.freezeScreenBeforeCapture)
-                    .font(.system(size: 13))
-                Toggle("Include window shadow in window capture", isOn: $prefs.windowCaptureShadow)
-                    .font(.system(size: 13))
+
+            SettingsCard(title: "Preparation") {
+                ToggleRow(title: "Hide desktop icons before capture",
+                          isOn: $prefs.hideDesktopIcons)
+                CardDivider()
+                ToggleRow(title: "Freeze screen before area selection",
+                          subtitle: "Selection happens over a frozen snapshot of the screen",
+                          isOn: $prefs.freezeScreenBeforeCapture)
+                CardDivider()
+                ToggleRow(title: "Include window shadow in window capture",
+                          isOn: $prefs.windowCaptureShadow)
             }
-            Section("Selection Mode") {
-                Toggle("Capture immediately (no resize box)", isOn: $prefs.directCapture)
-                    .font(.system(size: 13))
-                    .help("When enabled, captures immediately after drawing the selection.\nWhen disabled, shows resize handles to fine-tune the selection first.")
+
+            SettingsCard(title: "Selection Mode") {
+                ToggleRow(title: "Capture immediately",
+                          subtitle: "Capture as soon as you release the mouse. Off shows resize handles to fine-tune the selection first.",
+                          isOn: $prefs.directCapture)
             }
         }
     }
@@ -302,32 +355,39 @@ private struct PreferencesView: View {
     // MARK: Recording
 
     private var recordingTab: some View {
-        Form {
-            Section("Video Quality") {
-                Picker("Quality Preset", selection: $prefs.recordingQuality) {
-                    ForEach(RecordingQuality.allCases, id: \.self) { q in
-                        Text("\(q.rawValue.capitalized) (\(q.fps) FPS)").tag(q)
+        SettingsPage(tab: .recording) {
+            SettingsCard(title: "Video Quality") {
+                SettingsRow(title: "Quality preset") {
+                    Picker("", selection: $prefs.recordingQuality) {
+                        ForEach(RecordingQuality.allCases, id: \.self) { q in
+                            Text("\(q.rawValue.capitalized) · \(q.fps) FPS").tag(q)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 320)
                 }
-                .pickerStyle(.segmented)
             }
-            Section("Audio Options") {
-                Toggle("Record system audio", isOn: $prefs.recordSystemAudio)
-                    .font(.system(size: 13))
-                Toggle("Record microphone", isOn: $prefs.recordMicrophone)
-                    .font(.system(size: 13))
+
+            SettingsCard(title: "Audio") {
+                ToggleRow(title: "Record system audio", isOn: $prefs.recordSystemAudio)
+                CardDivider()
+                ToggleRow(title: "Record microphone", isOn: $prefs.recordMicrophone)
             }
-            Section("Display Options") {
-                Toggle("Show cursor during recording", isOn: $prefs.showCursorInRecording)
-                    .font(.system(size: 13))
-                Toggle("Show keystrokes", isOn: $prefs.showKeystrokes)
-                    .font(.system(size: 13))
-                    .help("Displays pressed keys as an overlay during recording")
+
+            SettingsCard(title: "Display") {
+                ToggleRow(title: "Show cursor during recording",
+                          isOn: $prefs.showCursorInRecording)
+                CardDivider()
+                ToggleRow(title: "Show keystrokes",
+                          subtitle: "Displays pressed keys as an overlay during recording",
+                          isOn: $prefs.showKeystrokes)
             }
-            Section("System Behavior") {
-                Toggle("Auto-enable Do Not Disturb", isOn: $prefs.autoDND)
-                    .font(.system(size: 13))
-                    .help("Automatically enables DND during recording and restores afterward")
+
+            SettingsCard(title: "System") {
+                ToggleRow(title: "Auto-enable Do Not Disturb",
+                          subtitle: "Silence notifications during recording, restore after",
+                          isOn: $prefs.autoDND)
             }
         }
     }
@@ -335,37 +395,39 @@ private struct PreferencesView: View {
     // MARK: Overlays (Webcam + Mouse clicks)
 
     private var overlaysTab: some View {
-        Form {
-            Section("Webcam Picture-in-Picture") {
-                Toggle("Enable webcam overlay", isOn: $prefs.webcamEnabled)
-                    .font(.system(size: 13))
+        SettingsPage(tab: .overlays) {
+            SettingsCard(title: "Webcam Picture-in-Picture") {
+                ToggleRow(title: "Enable webcam overlay",
+                          subtitle: "Show your camera in a corner of recordings",
+                          isOn: $prefs.webcamEnabled)
                 if prefs.webcamEnabled {
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Position").font(.system(size: 12, weight: .semibold))
-                            Picker("", selection: $prefs.webcamPosition) {
-                                ForEach(WebcamPosition.allCases, id: \.self) { pos in
-                                    Text(pos.displayName).tag(pos)
-                                }
+                    CardDivider()
+                    SettingsRow(title: "Position") {
+                        Picker("", selection: $prefs.webcamPosition) {
+                            ForEach(WebcamPosition.allCases, id: \.self) { pos in
+                                Text(pos.displayName).tag(pos)
                             }
-                            .pickerStyle(.menu)
                         }
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Size").font(.system(size: 12, weight: .semibold))
-                            Picker("", selection: $prefs.webcamSize) {
-                                ForEach(WebcamSize.allCases, id: \.self) { size in
-                                    Text("\(Int(size.size.width))×\(Int(size.size.height))").tag(size)
-                                }
+                        .labelsHidden()
+                        .frame(width: 150)
+                    }
+                    CardDivider()
+                    SettingsRow(title: "Size") {
+                        Picker("", selection: $prefs.webcamSize) {
+                            ForEach(WebcamSize.allCases, id: \.self) { size in
+                                Text("\(Int(size.size.width))×\(Int(size.size.height))").tag(size)
                             }
-                            .pickerStyle(.menu)
                         }
+                        .labelsHidden()
+                        .frame(width: 150)
                     }
                 }
             }
-            Section("Mouse Click Indicator") {
-                Toggle("Show click ripples", isOn: $prefs.showMouseClicks)
-                    .font(.system(size: 13))
-                    .help("Displays an animated ripple at each mouse click during recording")
+
+            SettingsCard(title: "Mouse Click Indicator") {
+                ToggleRow(title: "Show click ripples",
+                          subtitle: "Animated ripple at each mouse click during recording",
+                          isOn: $prefs.showMouseClicks)
             }
         }
     }
@@ -373,39 +435,31 @@ private struct PreferencesView: View {
     // MARK: Shortcuts
 
     private var shortcutsTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Capture Shortcuts").font(.system(size: 15, weight: .semibold))
-                    Text("Click a shortcut, then press a combination with ⌘ ⌥ ⌃ or ⇧. Press Esc to cancel, or ✕ to clear.")
-                        .font(.system(size: 11)).foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                VStack(spacing: 0) {
-                    let types = Array(CaptureType.allCases.enumerated())
-                    ForEach(types, id: \.element) { idx, type in
-                        shortcutRow(type)
-                        if idx < types.count - 1 {
-                            Divider().padding(.leading, 38)
-                        }
+        SettingsPage(tab: .shortcuts) {
+            SettingsCard(title: "Capture Shortcuts",
+                         footer: "Click a shortcut, then press a combination with ⌘ ⌥ ⌃ or ⇧. Press Esc to cancel, or ✕ to clear.") {
+                let types = Array(CaptureType.allCases.enumerated())
+                ForEach(types, id: \.element) { idx, type in
+                    shortcutRow(type)
+                    if idx < types.count - 1 {
+                        CardDivider()
                     }
                 }
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.05)))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.1), lineWidth: 1))
-
-                editorShortcutGuide
             }
-            .padding(.bottom, 8)
+
+            SettingsCard(title: "Editor Tool Keys") {
+                editorShortcutGrid
+                    .settingsRowPadding()
+            }
         }
     }
 
     private func shortcutRow(_ type: CaptureType) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: typeIcon(type))
-                .font(.system(size: 13))
+                .font(.system(size: 14))
                 .foregroundColor(.accentColor)
-                .frame(width: 18)
+                .frame(width: 22)
             Text(typeDisplayName(type)).font(.system(size: 13))
             Spacer()
             ShortcutRecorder(current: Binding(
@@ -417,8 +471,8 @@ private struct PreferencesView: View {
                 }
             ))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
     }
 
     private func typeIcon(_ type: CaptureType) -> String {
@@ -443,31 +497,28 @@ private struct PreferencesView: View {
         }
     }
 
-    private var editorShortcutGuide: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Editor Tool Shortcuts").font(.system(size: 15, weight: .semibold))
+    private var editorShortcutGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 8)], alignment: .leading, spacing: 8) {
             let tools: [(String, String)] = [
                 ("Arrow", "1"), ("Rectangle", "2"), ("Circle", "3"), ("Text", "4"),
                 ("Blur", "5"), ("Highlight", "6"), ("Freehand", "7"), ("Step Number", "8"),
                 ("Mosaic", "9"), ("Emoji", "0"), ("Line", "L"), ("Eraser", "X"),
                 ("Eyedropper", "I"), ("Crop", "K"),
             ]
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
-                ForEach(tools, id: \.0) { name, key in
-                    HStack(spacing: 6) {
-                        Text(name).font(.system(size: 11))
-                        Spacer(minLength: 4)
-                        Text(key)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .frame(minWidth: 16)
-                            .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
-                    .padding(.horizontal, 9).padding(.vertical, 5)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.04)))
+            ForEach(tools, id: \.0) { name, key in
+                HStack(spacing: 6) {
+                    Text(name).font(.system(size: 12))
+                    Spacer(minLength: 4)
+                    Text(key)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .frame(minWidth: 18)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
                 }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(0.05)))
             }
         }
     }
@@ -475,90 +526,77 @@ private struct PreferencesView: View {
     // MARK: Advanced
 
     private var advancedTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Section {
-                    Text("URL Scheme")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    Text("Trigger captures by opening cropit:// URLs in the browser, Raycast, Alfred, or scripts.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                GroupBox(label: Label("Available Commands", systemImage: "link")) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(urlCommands, id: \.url) { cmd in
-                            HStack(alignment: .top, spacing: 8) {
-                                Text(cmd.url)
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundColor(.accentColor)
-                                    .frame(maxWidth: 160, alignment: .leading)
-                                Text(cmd.desc)
-                                    .font(.system(size: 9))
-                                    .foregroundColor(.secondary)
-                            }
+        SettingsPage(tab: .advanced) {
+            SettingsCard(title: "URL Scheme",
+                         footer: "Trigger captures by opening cropit:// URLs from the browser, Raycast, Alfred, or scripts.") {
+                VStack(alignment: .leading, spacing: 0) {
+                    let cmds = Array(urlCommands.enumerated())
+                    ForEach(cmds, id: \.element.url) { idx, cmd in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(cmd.url)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(.accentColor)
+                                .textSelection(.enabled)
+                            Spacer(minLength: 8)
+                            Text(cmd.desc)
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
                         }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        if idx < cmds.count - 1 { CardDivider() }
                     }
-                    .padding(6)
                 }
-                .padding(.top, 4)
+            }
 
-                Section {
-                    Text("Cloud Upload / Share Links")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .padding(.top, 8)
-                    Text("Upload to your OWN endpoint (server, S3-compatible gateway, image host). Nothing is ever uploaded automatically — only when you press Upload.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            SettingsCard(title: "Cloud Upload / Share Links",
+                         footer: "Raw mode posts the PNG as the body. Multipart sends it as a file field. The returned link (whole body, or the JSON key above) is copied to your clipboard. Nothing is uploaded automatically — only when you press Upload.") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Picker("", selection: $prefs.uploadMethod) {
+                            Text("POST").tag("POST")
+                            Text("PUT").tag("PUT")
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 120)
+                        TextField("https://example.com/upload", text: $prefs.uploadURL)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12, design: .monospaced))
+                    }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Picker("", selection: $prefs.uploadMethod) {
-                                Text("POST").tag("POST")
-                                Text("PUT").tag("PUT")
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(width: 110)
-                            TextField("https://example.com/upload", text: $prefs.uploadURL)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Multipart field").font(.system(size: 11)).foregroundColor(.secondary)
+                            TextField("empty = raw body", text: $prefs.uploadFieldName)
                                 .textFieldStyle(.roundedBorder)
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(.system(size: 12, design: .monospaced))
                         }
-
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Multipart field").font(.system(size: 10)).foregroundColor(.secondary)
-                                TextField("empty = raw body", text: $prefs.uploadFieldName)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 11, design: .monospaced))
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Response link key").font(.system(size: 10)).foregroundColor(.secondary)
-                                TextField("e.g. data.link", text: $prefs.uploadResponseKey)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 11, design: .monospaced))
-                            }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Response link key").font(.system(size: 11)).foregroundColor(.secondary)
+                            TextField("e.g. data.link", text: $prefs.uploadResponseKey)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 12, design: .monospaced))
                         }
+                    }
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Headers (one per line: Key: Value)").font(.system(size: 10)).foregroundColor(.secondary)
-                            TextEditor(text: $prefs.uploadHeaders)
-                                .font(.system(size: 11, design: .monospaced))
-                                .frame(height: 54)
-                                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.25), lineWidth: 1))
-                        }
-
-                        Text("Raw mode posts the PNG as the body. Multipart sends it as a file field. The returned link (whole body, or the JSON key above) is copied to your clipboard.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Headers (one per line: Key: Value)")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                        TextEditor(text: $prefs.uploadHeaders)
+                            .font(.system(size: 12, design: .monospaced))
+                            .frame(height: 60)
+                            .scrollContentBackground(.hidden)
+                            .padding(4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(nsColor: .textBackgroundColor))
+                            )
+                            .overlay(RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.25), lineWidth: 1))
                     }
                 }
-
-                Spacer()
+                .settingsRowPadding()
             }
         }
     }
@@ -601,6 +639,171 @@ private struct PreferencesView: View {
     }
 }
 
+// MARK: - Design System Components
+
+/// Sidebar navigation row: colored icon tile + label, accent fill when selected.
+private struct SidebarItem: View {
+    let icon: String
+    let tint: Color
+    let label: String
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 23, height: 23)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(tint.gradient))
+                Text(label)
+                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    .foregroundColor(selected ? .white : .primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 5)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selected ? Color.accentColor
+                          : (hovering ? Color.primary.opacity(0.06) : Color.clear))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .onHover { h in
+            hovering = h
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .padding(.vertical, 1)
+    }
+}
+
+/// Scrollable page with a large title header and a centered, width-capped column.
+private struct SettingsPage<Content: View>: View {
+    let tab: PreferencesView.SettingsTab
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(tab.label)
+                        .font(.system(size: 26, weight: .bold))
+                    Text(tab.subtitle)
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.bottom, 2)
+
+                content
+            }
+            .padding(.horizontal, 36)
+            .padding(.top, 36)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 660, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
+/// Rounded card grouping related settings rows, with optional header + footer.
+private struct SettingsCard<Content: View>: View {
+    var title: String? = nil
+    var footer: String? = nil
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if let title {
+                Text(title.uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .kerning(0.6)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 4)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.07), radius: 2, y: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+            )
+            if let footer {
+                Text(footer)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 4)
+            }
+        }
+    }
+}
+
+/// Inset divider between card rows.
+private struct CardDivider: View {
+    var body: some View {
+        Divider().padding(.leading, 14)
+    }
+}
+
+/// Standard card row: title (+ optional subtitle) left, control right.
+private struct SettingsRow<Control: View>: View {
+    let title: String
+    var subtitle: String? = nil
+    @ViewBuilder var control: Control
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 16)
+            control
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+}
+
+/// Card row with a modern switch instead of a checkbox.
+private struct ToggleRow: View {
+    let title: String
+    var subtitle: String? = nil
+    @Binding var isOn: Bool
+
+    var body: some View {
+        SettingsRow(title: title, subtitle: subtitle) {
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+        }
+    }
+}
+
+private extension View {
+    /// Padding matching SettingsRow, for free-form card content (sliders, fields).
+    func settingsRowPadding() -> some View {
+        self.padding(.horizontal, 14).padding(.vertical, 12)
+    }
+}
+
 // MARK: - ShortcutRecorder Component
 
 private struct ShortcutRecorder: View {
@@ -621,24 +824,25 @@ private struct ShortcutRecorder: View {
                 }
             } label: {
                 Text(displayText)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundColor(isRecording ? .white : .secondary)
-                    .frame(width: 116, height: 22)
+                    .frame(width: 124, height: 24)
                     .background(isRecording ? Color.accentColor : Color.secondary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(isRecording ? Color.accentColor : Color.secondary.opacity(0.15), lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
+            .handCursorOnHover()
 
             // Clear button — only when a shortcut is set and not recording.
             Button {
                 current = HotKeyCombination(keyCode: 0, modifiers: 0)
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
