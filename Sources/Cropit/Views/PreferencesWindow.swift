@@ -447,8 +447,9 @@ private struct PreferencesView: View {
                 }
             }
 
-            SettingsCard(title: "Editor Tool Keys") {
-                editorShortcutGrid
+            SettingsCard(title: "Editor Tool Keys",
+                         footer: "Click a key badge and press any key (with optional ⇧) to remap. Press Esc to cancel.") {
+                EditorHotkeyEditor(hotkeys: $prefs.editorHotkeys, onSave: { prefs.save() })
                     .settingsRowPadding()
             }
         }
@@ -497,31 +498,6 @@ private struct PreferencesView: View {
         }
     }
 
-    private var editorShortcutGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 8)], alignment: .leading, spacing: 8) {
-            let tools: [(String, String)] = [
-                ("Arrow", "1"), ("Rectangle", "2"), ("Circle", "3"), ("Text", "4"),
-                ("Blur", "5"), ("Highlight", "6"), ("Freehand", "7"), ("Step Number", "8"),
-                ("Mosaic", "9"), ("Emoji", "0"), ("Line", "L"), ("Eraser", "X"),
-                ("Eyedropper", "I"), ("Crop", "K"),
-            ]
-            ForEach(tools, id: \.0) { name, key in
-                HStack(spacing: 6) {
-                    Text(name).font(.system(size: 12))
-                    Spacer(minLength: 4)
-                    Text(key)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .frame(minWidth: 18)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(Color.secondary.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                }
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(0.05)))
-            }
-        }
-    }
 
     // MARK: Advanced
 
@@ -920,5 +896,173 @@ private final class ShortcutCapture {
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
         if ShortcutCapture.active === self { ShortcutCapture.active = nil }
         completion(combo)
+    }
+}
+
+// MARK: - EditorHotkeyEditor
+
+private struct EditorHotkeyEditor: View {
+    @Binding var hotkeys: [String: String]
+    let onSave: () -> Void
+
+    @State private var recordingTool: String? = nil
+    @State private var conflictAlert: ConflictInfo? = nil
+
+    private struct ConflictInfo: Identifiable {
+        let id = UUID()
+        let newTool: String
+        let newKey: String
+        let existingTool: String
+    }
+
+    // Ordered list of (toolRaw, displayName)
+    private let toolRows: [(String, String)] = [
+        ("arrow", "Arrow"),         ("curvedArrow", "Curved Arrow"),
+        ("rect", "Rectangle"),      ("circle", "Circle"),
+        ("text", "Text"),           ("line", "Line"),
+        ("blur", "Blur"),           ("highlight", "Highlight"),
+        ("smartHighlight", "Smart Highlight"), ("freehand", "Freehand"),
+        ("stepNumber", "Step Number"), ("mosaic", "Mosaic"),
+        ("emoji", "Emoji"),         ("ruler", "Ruler"),
+        ("spotlight", "Spotlight"), ("magnifierCallout", "Magnifier"),
+        ("eraser", "Eraser"),       ("eyedropper", "Eyedropper"),
+        ("crop", "Crop"),
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 8)],
+                      alignment: .leading, spacing: 8) {
+                ForEach(toolRows, id: \.0) { raw, name in
+                    toolRow(raw: raw, name: name)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Reset to Defaults") {
+                    withAnimation {
+                        hotkeys = Preferences.defaultEditorHotkeys
+                        onSave()
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundColor(.accentColor)
+                .padding(.top, 10)
+            }
+        }
+        .alert(item: $conflictAlert) { info in
+            Alert(
+                title: Text("Key already used"),
+                message: Text("\"\(info.newKey.uppercased())\" is already assigned to \(displayName(info.existingTool)). Replace it?"),
+                primaryButton: .destructive(Text("Replace")) {
+                    hotkeys.removeValue(forKey: info.existingTool)
+                    hotkeys[info.newTool] = info.newKey
+                    onSave()
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
+
+    private func toolRow(raw: String, name: String) -> some View {
+        let isRecording = recordingTool == raw
+        let currentKey = hotkeys[raw]
+        return HStack(spacing: 6) {
+            Text(name)
+                .font(.system(size: 12))
+                .lineLimit(1)
+            Spacer(minLength: 2)
+            Button {
+                if isRecording {
+                    EditorKeyCapture.cancelActive()
+                } else {
+                    recordingTool = raw
+                    EditorKeyCapture.begin { key in
+                        recordingTool = nil
+                        guard let key else { return }
+                        // Conflict check
+                        if let conflict = hotkeys.first(where: { $0.value == key && $0.key != raw }) {
+                            conflictAlert = ConflictInfo(newTool: raw, newKey: key, existingTool: conflict.key)
+                        } else {
+                            hotkeys[raw] = key
+                            onSave()
+                        }
+                    }
+                }
+            } label: {
+                Text(isRecording ? "…" : (currentKey?.uppercased() ?? "–"))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(isRecording ? .white : (currentKey == nil ? .secondary.opacity(0.5) : .secondary))
+                    .frame(minWidth: 26)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(isRecording ? Color.accentColor : Color.secondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5)
+                        .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .handCursorOnHover()
+
+            if currentKey != nil && !isRecording {
+                Button {
+                    hotkeys.removeValue(forKey: raw)
+                    onSave()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 7)
+            .fill(isRecording ? Color.accentColor.opacity(0.07) : Color.secondary.opacity(0.05)))
+    }
+
+    private func displayName(_ raw: String) -> String {
+        toolRows.first(where: { $0.0 == raw })?.1 ?? raw
+    }
+}
+
+// MARK: - EditorKeyCapture
+
+/// Captures a single key press (with optional ⇧) for editor tool rebinding.
+private final class EditorKeyCapture {
+    private static var active: EditorKeyCapture?
+    private var monitor: Any?
+    private let completion: (String?) -> Void
+
+    private init(completion: @escaping (String?) -> Void) {
+        self.completion = completion
+    }
+
+    static func begin(completion: @escaping (String?) -> Void) {
+        cancelActive()
+        let capture = EditorKeyCapture(completion: completion)
+        active = capture
+        capture.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
+            if event.keyCode == 53 { capture.finish(nil); return nil }  // Esc → cancel
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard let char = event.charactersIgnoringModifiers?.lowercased(), !char.isEmpty else {
+                return nil
+            }
+            // Only accept alphanumeric, digits, and a few symbols; reject modifiers-only
+            let validChars = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-=[];',./\\`"))
+            guard char.unicodeScalars.allSatisfy({ validChars.contains($0) }) else { return nil }
+            let key = mods == .shift ? "⇧\(char)" : char
+            capture.finish(key)
+            return nil
+        }
+    }
+
+    static func cancelActive() { active?.finish(nil) }
+
+    private func finish(_ key: String?) {
+        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        if EditorKeyCapture.active === self { EditorKeyCapture.active = nil }
+        completion(key)
     }
 }
