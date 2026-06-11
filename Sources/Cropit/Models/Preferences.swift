@@ -157,6 +157,7 @@ final class Preferences: ObservableObject {
     @Published var showFloatingThumbnail: Bool = false
     /// When true: dims the unselected area (non-selection), making selection stand out
     @Published var dimSelectionOverlay: Bool = false
+    @Published var directCapture: Bool = false  // When true, capture immediately; when false, show resize handles
     @Published var hotkeys: [CaptureType: HotKeyCombination] = HotKeyCombination.default()
 
     var expandedSavePath: String {
@@ -218,6 +219,7 @@ final class Preferences: ObservableObject {
         windowCaptureShadow = decoded.windowCaptureShadow
         showFloatingThumbnail = decoded.showFloatingThumbnail
         dimSelectionOverlay = decoded.dimSelectionOverlay
+        directCapture = decoded.directCapture ?? false
 
         // One-time migration: the selection overlay is now minimal by default
         // (no dim / magnifier / crosshair). Apply that once to existing installs.
@@ -268,7 +270,8 @@ final class Preferences: ObservableObject {
             hotkeys: hotkeys,
             windowCaptureShadow: windowCaptureShadow,
             showFloatingThumbnail: showFloatingThumbnail,
-            dimSelectionOverlay: dimSelectionOverlay
+            dimSelectionOverlay: dimSelectionOverlay,
+            directCapture: directCapture
         )
         guard let data = try? JSONEncoder().encode(storage) else { return }
         UserDefaults.standard.set(data, forKey: Self.defaultsKey)
@@ -312,5 +315,6 @@ final class Preferences: ObservableObject {
         var windowCaptureShadow: Bool
         var showFloatingThumbnail: Bool
         var dimSelectionOverlay: Bool
+        var directCapture: Bool?         // optional for backward compatibility
     }
 }

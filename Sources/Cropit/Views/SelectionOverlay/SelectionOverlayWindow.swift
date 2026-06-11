@@ -30,7 +30,7 @@ final class SelectionOverlayWindow: NSWindow {
     ///     visible background) so pixel colors read true, not through our dim overlay.
     init(frozenImage: CGImage? = nil, sampleImage: CGImage? = nil,
          dimOverlay: Bool = true, showMagnifier: Bool = true, showCrosshair: Bool = true,
-         mode: CaptureMode = .area) {
+         directCapture: Bool = false, mode: CaptureMode = .area) {
         self.frozenImage = frozenImage
         let screens = NSScreen.screens
         let totalFrame = screens.reduce(NSZeroRect) { $0.union($1.frame) }
@@ -63,7 +63,8 @@ final class SelectionOverlayWindow: NSWindow {
             mode: mode,
             dimOverlay: dimOverlay,
             showMagnifier: showMagnifier,
-            showCrosshair: showCrosshair
+            showCrosshair: showCrosshair,
+            directCapture: directCapture
         )
 
         // Use CrosshairHostingView so cursor rects are auto-managed by AppKit

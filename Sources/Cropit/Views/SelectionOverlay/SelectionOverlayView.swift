@@ -23,6 +23,7 @@ struct SelectionOverlayView: View {
     var dimOverlay: Bool = true   // false = Shottr "no-overlay" minimal mode
     var showMagnifier: Bool = true
     var showCrosshair: Bool = true
+    var directCapture: Bool = false  // When true, auto-confirm; when false, show adjust UI
 
     private enum Phase { case idle, drawing, adjusting }
     private enum Handle { case tl, tr, bl, br, top, bottom, left, right, inside }
@@ -63,8 +64,17 @@ struct SelectionOverlayView: View {
             case .active(let p):
                 mouseLocation = p
                 hovering = true
+                // Update cursor based on handle hover
+                if phase == .ended {
+                    NSCursor.arrow.set()
+                } else if let sel = selection, let handle = handleHit(at: p, rect: sel) {
+                    updateCursorForHandle(handle)
+                } else {
+                    NSCursor.arrow.set()
+                }
             case .ended:
                 hovering = false
+                NSCursor.arrow.set()
             }
         }
         .onAppear(perform: installKeyMonitor)
@@ -119,7 +129,12 @@ struct SelectionOverlayView: View {
                 case .drawing:
                     if let sel = selection, sel.width >= minSize, sel.height >= minSize {
                         selection = clamp(sel)
-                        phase = .adjusting              // refine before capturing
+                        if directCapture {
+                            // Auto-confirm immediately
+                            onCapture(sel)
+                        } else {
+                            phase = .adjusting              // show adjust UI
+                        }
                     } else {
                         selection = nil
                         phase = .idle                   // stray click: stay in overlay
@@ -220,6 +235,17 @@ struct SelectionOverlayView: View {
             return h
         }
         return nil
+    }
+
+    private func updateCursorForHandle(_ handle: Handle) {
+        let cursor: NSCursor = switch handle {
+        case .tl, .br: NSCursor.crosshair  // diagonal resize (no native diagonal, use crosshair)
+        case .tr, .bl: NSCursor.crosshair
+        case .top, .bottom: NSCursor.resizeUpDown
+        case .left, .right: NSCursor.resizeLeftRight
+        case .inside: NSCursor.openHand
+        }
+        cursor.set()
     }
 
     private func actionBarRect(for r: CGRect) -> CGRect {
