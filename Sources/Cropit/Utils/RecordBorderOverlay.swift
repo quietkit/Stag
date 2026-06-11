@@ -39,7 +39,7 @@ final class RecordBorderOverlay: NSWindow {
 private final class BorderView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setStrokeColor(CGColor(red: 1, green: 0.3, blue: 0.3, alpha: 0.9))
+        ctx.setStrokeColor(Palette.borderRed)
         ctx.setLineWidth(RecordBorderOverlay.borderWidth)
         ctx.stroke(bounds.insetBy(dx: RecordBorderOverlay.borderWidth / 2,
                                   dy: RecordBorderOverlay.borderWidth / 2))

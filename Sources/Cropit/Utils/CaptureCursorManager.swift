@@ -7,10 +7,19 @@ final class CaptureCursorManager {
     static let shared = CaptureCursorManager()
     private var isActive = false
     private var cursor: NSCursor?
+    private var activationObserver: Any?
 
     private init() {
         // Listen for app activation to re‑apply the cursor if needed.
-        NotificationCenter.default.addObserver(self, selector: #selector(appDidActivate), name: NSApplication.didBecomeActiveNotification, object: nil)
+        activationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.appDidActivate()
+        }
+    }
+
+    deinit {
+        if let obs = activationObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
     }
 
     /// The currently active cursor (read‑only for cursor‑rect registration).
@@ -51,11 +60,11 @@ final class CaptureCursorManager {
             let crossLen: CGFloat = 12
 
             // Double‑stroke: dark outline → white fill for readability on any background.
-            for (lw, r, g, b, a) in [
-                (CGFloat(2.0), CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0.65)),
-                (CGFloat(1.2), CGFloat(1), CGFloat(1), CGFloat(1), CGFloat(1.0 )),
+            for (lw, color) in [
+                (CGFloat(2.0), Palette.cursorDark),
+                (CGFloat(1.2), Palette.cursorLight),
             ] {
-                ctx.setStrokeColor(CGColor(red: r, green: g, blue: b, alpha: a))
+                ctx.setStrokeColor(color)
                 ctx.setLineWidth(lw)
 
                 // Circle

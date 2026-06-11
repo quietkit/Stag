@@ -386,22 +386,22 @@ final class ScrollingPickerContentView: NSView {
               let w = windowRef ?? window
         else { return }
 
-        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.12))
+        ctx.setFillColor(Palette.dimOverlay)
         ctx.fill(dirtyRect)
 
         guard let rect = highlightedWindowRect, let name = highlightedWindowName else { return }
 
         let viewRect = screenRectToView(rect, window: w)
 
-        ctx.setStrokeColor(CGColor(red: 0.2, green: 0.8, blue: 0.3, alpha: 0.9))
+        ctx.setStrokeColor(Palette.accentGreen)
         ctx.setLineWidth(3)
-        ctx.setShadow(offset: .zero, blur: 6, color: CGColor(red: 0.2, green: 0.8, blue: 0.3, alpha: 0.4))
+        ctx.setShadow(offset: .zero, blur: 6, color: Palette.accentGreenDim)
         ctx.stroke(viewRect)
         ctx.setShadow(offset: .zero, blur: 0, color: nil)
 
         let handleSize: CGFloat = 8
         let half = handleSize / 2
-        ctx.setFillColor(CGColor(red: 0.2, green: 0.8, blue: 0.3, alpha: 1))
+        ctx.setFillColor(Palette.accentGreenFill)
         for corner in cornerPoints(rect: viewRect) {
             ctx.fillEllipse(in: CGRect(x: corner.x - half, y: corner.y - half, width: handleSize, height: handleSize))
         }
@@ -416,7 +416,7 @@ final class ScrollingPickerContentView: NSView {
         )
         let bgPath = CGPath(roundedRect: badgeRect, cornerWidth: 5, cornerHeight: 5, transform: nil)
         ctx.addPath(bgPath)
-        ctx.setFillColor(CGColor(red: 0.2, green: 0.8, blue: 0.3, alpha: 0.85))
+        ctx.setFillColor(Palette.accentGreenFill)
         ctx.fillPath()
         badgeText.draw(at: NSPoint(x: badgeRect.minX + 6, y: badgeRect.minY + 4),
                        withAttributes: badgeAttrs)
@@ -432,7 +432,7 @@ final class ScrollingPickerContentView: NSView {
         )
         let labelBg = CGPath(roundedRect: labelRect, cornerWidth: 5, cornerHeight: 5, transform: nil)
         ctx.addPath(labelBg)
-        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.75))
+        ctx.setFillColor(Palette.labelBg)
         ctx.fillPath()
         label.draw(at: NSPoint(x: labelRect.minX + 6, y: labelRect.minY + 4),
                    withAttributes: labelAttrs)

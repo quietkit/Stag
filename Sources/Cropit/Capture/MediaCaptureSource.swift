@@ -35,9 +35,9 @@ final class MediaCaptureSource: CaptureSource {
     func requestStop() {
         borderOverlay?.close()
         borderOverlay = nil
-        stopRequested = true
         Task { @MainActor in
             _ = await recorder.stopCapture()
+            self.stopRequested = true
             self.stopContinuation?.resume()
             self.stopContinuation = nil
         }

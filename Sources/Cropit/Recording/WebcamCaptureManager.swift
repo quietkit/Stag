@@ -7,6 +7,7 @@ final class WebcamCaptureManager: NSObject {
     static let shared = WebcamCaptureManager()
 
     @Published private(set) var isRunning = false
+    var onError: ((String) -> Void)?
 
     private let captureSession = AVCaptureSession()
     private let videoDataOutput = AVCaptureVideoDataOutput()
@@ -31,6 +32,7 @@ final class WebcamCaptureManager: NSObject {
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             guard granted else {
                 os_log(.error, "Camera access denied – webcam overlay disabled")
+                DispatchQueue.main.async { self?.onError?("Camera access denied – webcam overlay disabled") }
                 return
             }
             DispatchQueue.main.async { self?.setupAndRunSession() }
@@ -44,8 +46,16 @@ final class WebcamCaptureManager: NSObject {
             mediaType: .video,
             position: .unspecified
         ).devices.first
-        guard let device = device else { return }
-        guard let input = try? AVCaptureDeviceInput(device: device) else { return }
+        guard let device = device else {
+            os_log(.error, "No camera device found – webcam overlay disabled")
+            onError?("No camera device found – webcam overlay disabled")
+            return
+        }
+        guard let input = try? AVCaptureDeviceInput(device: device) else {
+            os_log(.error, "Could not create camera input – webcam overlay disabled")
+            onError?("Could not create camera input – webcam overlay disabled")
+            return
+        }
         captureSession.beginConfiguration()
         captureSession.sessionPreset = .medium
         guard captureSession.canAddInput(input) else {

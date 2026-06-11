@@ -18,6 +18,7 @@ struct HistoryBrowserView: View {
     @State private var searchText = ""
     @State private var selectedId: UUID?
     @State private var hoveredId: UUID?
+    @State private var singleTapWork: DispatchWorkItem?
 
     private let columns = [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 16)]
 
@@ -143,9 +144,17 @@ struct HistoryBrowserView: View {
                 ForEach(filtered) { record in
                     thumbnailCell(record)
                         // Double-click opens the editor; single click only selects.
-                        // (count:2 must be declared first so SwiftUI disambiguates.)
-                        .onTapGesture(count: 2) { openEditor(record) }
-                        .onTapGesture(count: 1) { selectedId = record.id }
+                        // Use a short delay so the double-tap cancels the single-tap action.
+                        .onTapGesture(count: 2) {
+                            singleTapWork?.cancel()
+                            openEditor(record)
+                        }
+                        .onTapGesture(count: 1) {
+                            singleTapWork?.cancel()
+                            let work = DispatchWorkItem { selectedId = record.id }
+                            singleTapWork = work
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+                        }
                 }
             }
             .padding(18)

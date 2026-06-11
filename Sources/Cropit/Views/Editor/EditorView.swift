@@ -396,7 +396,7 @@ struct EditorView: View {
             case (27, _) where mods == [.command]: // ⌘-
                 zoomOut()
                 return nil
-            case (0, _) where mods == [.command]: // ⌘0
+            case (29, _) where mods == [.command]: // ⌘0
                 resetZoom()
                 return nil
             case (30, _) where mods == [.command]: // ⌘]
@@ -408,6 +408,9 @@ struct EditorView: View {
             default:
                 break
             }
+            // Don't activate tool shortcuts while the text input alert is visible.
+            guard !showingTextAlert else { return event }
+
             // Tool shortcuts. NOTE: macOS digit keycodes are non-sequential —
             // 5=23, 6=22, 7=26, 8=28, 9=25 — so these were previously mismapped
             // (e.g. pressing 5 selected Highlight instead of Blur).
