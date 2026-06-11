@@ -9,13 +9,8 @@ final class AreaCaptureSource: CaptureSource {
         let showMagnifier = store.preferences.showMagnifier
         let showCrosshair = store.preferences.showCrosshair
 
-        // Capture a clean composite (frozen background / true-color loupe source)
-        // and enumerate windows (for hover-to-capture) concurrently so their
-        // latencies overlap rather than add up.
-        async let compositeTask: CGImage? = (freeze || showMagnifier) ? (try? await ScreenComposite.capture()) : nil
-        async let windowsTask: [DetectedWindow] = WindowEnumerator.enumerate()
-        let composite = await compositeTask
-        let windows = await windowsTask
+        // Capture a clean composite (frozen background / true-color loupe source).
+        let composite = (freeze || showMagnifier) ? (try? await ScreenComposite.capture()) : nil
         let frozenImage = freeze ? composite : nil   // only shown when freeze is on
         let sampleImage = composite                  // loupe always samples this when present
 
@@ -24,7 +19,7 @@ final class AreaCaptureSource: CaptureSource {
             DispatchQueue.main.async {
                 let overlay = SelectionOverlayWindow(frozenImage: frozenImage, sampleImage: sampleImage,
                                                      dimOverlay: dimOverlay, showMagnifier: showMagnifier,
-                                                     showCrosshair: showCrosshair, windows: windows)
+                                                     showCrosshair: showCrosshair, mode: .area)
                 overlay.onCapture = { image in
                     continuation.resume(returning: image)
                 }

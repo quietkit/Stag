@@ -387,7 +387,7 @@ final class CaptureManager {
             let sample: CGImage? = showMagnifier ? try? await ScreenComposite.capture() : nil
             let overlay = SelectionOverlayWindow(frozenImage: nil, sampleImage: sample,
                                                  dimOverlay: dimOverlay, showMagnifier: showMagnifier,
-                                                 showCrosshair: prefs.showCrosshair)
+                                                 showCrosshair: prefs.showCrosshair, mode: .ocr)
             overlay.onCapture = { [weak self] cgImage in
                 guard let self else { return }
                 Task { @MainActor in

@@ -41,7 +41,8 @@ final class MediaCaptureSource: CaptureSource {
     }
 
     private func _beginCapture(store: AppStore) async throws -> CaptureOutput {
-        let (selectionRect, display) = try await RecordingTargetSelector.select()
+        let captureMode: CaptureMode = type == .gif ? .gif : .recording
+        let (selectionRect, display) = try await RecordingTargetSelector.select(mode: captureMode)
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let scDisplay = content.displays.first(where: { $0.displayID == display }) else {
