@@ -1478,39 +1478,15 @@ struct EditorView: View {
     }
 
     private func toolButton(_ tool: DrawingTool) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.15)) {
-                currentTool = tool
-            }
-        } label: {
-            Image(systemName: toolIcon(tool))
-                .font(.system(size: 12, weight: currentTool == tool ? .semibold : .regular))
-                .foregroundColor(currentTool == tool ? .white : .secondary)
-                .frame(width: 28, height: toolBtn)
-                .background(
-                    ZStack {
-                        if currentTool == tool {
-                            Capsule()
-                                .fill(Color.accentColor)
-                                .shadow(color: Color.accentColor.opacity(0.4), radius: 4, y: 1)
-                        } else {
-                            Capsule()
-                                .fill(Color.secondary.opacity(0.08))
-                        }
-                    }
-                )
-        }
-        .buttonStyle(.plain)
-        .modernTooltip(toolHelp(tool))
-        .scaleEffect(currentTool == tool ? 1.05 : 1.0)
-        .onHover { hovering in
-            if hovering {
-                NSCursor.pointingHand.set()
-            } else {
-                NSCursor.arrow.set()
-            }
-        }
+        ToolButtonView(
+            tool: tool,
+            isSelected: currentTool == tool,
+            icon: toolIcon(tool),
+            tooltip: toolHelp(tool),
+            onTap: { withAnimation(.easeOut(duration: 0.15)) { currentTool = tool } }
+        )
     }
+
 
     private func toolHelp(_ tool: DrawingTool) -> String {
         let name = tool.rawValue.capitalized
@@ -2546,36 +2522,86 @@ enum HoverPhase {
     case moved(CGPoint)
 }
 
-// MARK: - Tooltip and Cursor Helpers
+// MARK: - Tool Button
 
-extension View {
-    /// Tooltip helper - uses macOS standard help text
-    func modernTooltip(_ text: String) -> some View {
-        self.help(text)
-    }
+private struct ToolButtonView: View {
+    let tool: DrawingTool
+    let isSelected: Bool
+    let icon: String
+    let tooltip: String
+    let onTap: () -> Void
+    @State private var isHovering = false
+    private let size: CGFloat = 28
 
-    /// Hand pointer cursor on hover (for all interactive elements)
-    func handCursorOnHover() -> some View {
-        self.onHover { hovering in
-            if hovering {
-                NSCursor.pointingHand.set()
-            } else {
-                NSCursor.arrow.set()
-            }
+    var body: some View {
+        Button(action: onTap) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(isSelected ? .white : (isHovering ? .primary : .secondary))
+                .frame(width: size, height: size)
+                .background {
+                    if isSelected {
+                        Capsule().fill(Color.accentColor)
+                            .shadow(color: Color.accentColor.opacity(0.4), radius: 4, y: 1)
+                    } else if isHovering {
+                        Capsule().fill(Color.secondary.opacity(0.15))
+                            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1))
+                    }
+                }
         }
+        .buttonStyle(.plain)
+        .scaleEffect(isSelected ? 1.05 : 1.0)
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .onHover { h in
+            isHovering = h
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .modernTooltip(tooltip)
     }
 }
 
-// Custom button style that automatically shows hand cursor on hover
-struct HandCursorButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.set()
-                } else {
-                    NSCursor.arrow.set()
+// MARK: - Tooltip and Cursor Helpers
+
+private struct TooltipModifier: ViewModifier {
+    let text: String
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { isHovering = $0 }
+            .overlay(alignment: .top) {
+                if isHovering {
+                    Text(text)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.black.opacity(0.82))
+                                .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                        )
+                        .fixedSize()
+                        .offset(y: -30)
+                        .allowsHitTesting(false)
+                        .transition(.opacity.animation(.easeInOut(duration: 0.1)))
+                        .zIndex(999)
                 }
             }
+    }
+}
+
+extension View {
+    /// Fast styled tooltip — shows immediately on hover (no macOS delay)
+    func modernTooltip(_ text: String) -> some View {
+        modifier(TooltipModifier(text: text))
+    }
+
+    /// Hand pointer cursor on hover
+    func handCursorOnHover() -> some View {
+        self.onHover { hovering in
+            if hovering { NSCursor.pointingHand.set() }
+            else        { NSCursor.arrow.set() }
+        }
     }
 }

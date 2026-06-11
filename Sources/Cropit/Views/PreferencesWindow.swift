@@ -86,23 +86,49 @@ private struct PreferencesView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(visibleTabs, id: \.self, selection: $selectedTab) { tab in
-                Label(tab.label, systemImage: tab.icon)
-                    .font(.system(size: 12))
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 4)
+        HStack(spacing: 0) {
+            // Sidebar — plain VStack, never goes blank
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(visibleTabs, id: \.self) { tab in
+                    sidebarRow(tab)
+                }
+                Spacer()
             }
-            .listStyle(.sidebar)
-            .frame(minWidth: 160, idealWidth: 170, maxWidth: 180)
-            .navigationSplitViewColumnWidth(min: 155, ideal: 165, max: 180)
-        } detail: {
-            detailView
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
+            .frame(width: 170)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
+
+            // Detail — always shows something
+            ScrollView {
+                detailView
+                    .padding(24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationSplitViewStyle(.balanced)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDisappear { prefs.save() }
+    }
+
+    private func sidebarRow(_ tab: SettingsTab) -> some View {
+        Button {
+            selectedTab = tab
+        } label: {
+            Label(tab.label, systemImage: tab.icon)
+                .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
+                .foregroundColor(selectedTab == tab ? .white : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(selectedTab == tab ? Color.accentColor : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .handCursorOnHover()
     }
 
     @ViewBuilder

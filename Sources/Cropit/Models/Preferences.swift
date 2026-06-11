@@ -219,7 +219,7 @@ final class Preferences: ObservableObject {
         windowCaptureShadow = decoded.windowCaptureShadow
         showFloatingThumbnail = decoded.showFloatingThumbnail
         dimSelectionOverlay = decoded.dimSelectionOverlay
-        directCapture = decoded.directCapture ?? false
+        directCapture = decoded.directCapture ?? true
 
         // One-time migration: the selection overlay is now minimal by default
         // (no dim / magnifier / crosshair). Apply that once to existing installs.
