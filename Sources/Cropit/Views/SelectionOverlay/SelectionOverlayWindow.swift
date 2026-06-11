@@ -140,12 +140,12 @@ final class SelectionOverlayWindow: NSWindow {
     // MARK: Show / hide
 
     func show() {
-        Self.precisionCursor.push()        // set the precision cursor first
+        CaptureCursorManager.shared.apply()
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         // Force it visible immediately — without this the cursor only updates on the
         // first mouse-move, so it looks unchanged until you start dragging.
-        Self.precisionCursor.set()
+        CaptureCursorManager.shared.cursor?.set()
         DispatchQueue.main.async { [weak self] in
             guard let self, let cv = self.contentView else { return }
             self.invalidateCursorRects(for: cv)
