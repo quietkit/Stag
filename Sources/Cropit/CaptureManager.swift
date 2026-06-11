@@ -235,16 +235,63 @@ final class CaptureManager {
     // MARK: - Video Pipeline
 
     private func handleCapturedVideo(_ url: URL, type: CaptureType) {
-        store.captureState = .completed
+        store.captureState = .processing
 
         // Show trimmer for screen recordings (not GIFs)
         if type == .recording {
+            store.captureState = .completed
             showVideoTrimmer(url)
             return
         }
 
+        // GIFs: treat like images — save to history and show thumbnail
+        if type == .gif {
+            handleCapturedGIF(url)
+            return
+        }
+
+        store.captureState = .completed
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
+    }
+
+    private func handleCapturedGIF(_ url: URL) {
+        let prefs = store.preferences
+
+        // Extract first frame as thumbnail
+        guard let thumbFrame = extractGIFFirstFrame(url) else {
+            store.captureState = .completed
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
+            return
+        }
+
+        let nsThumbImage = NSImage(cgImage: thumbFrame, size: NSSize(width: thumbFrame.width, height: thumbFrame.height))
+
+        if prefs.autoCopyToClipboard {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
+        }
+
+        if prefs.automaticSave {
+            // Register in history with GIF-based thumbnail
+            let thumbDir = URL(fileURLWithPath: prefs.expandedSavePath).appendingPathComponent(".thumbs")
+            try? FileManager.default.createDirectory(at: thumbDir, withIntermediateDirectories: true)
+            let thumbURL = thumbDir.appendingPathComponent("thumb_\(Date().shotTimestamp).jpg")
+            saveJPEGThumbnail(nsThumbImage, to: thumbURL)
+            store.recordCapture(image: nsThumbImage, type: .gif, saveURL: url, thumbnailURL: thumbURL)
+        }
+
+        if prefs.showFloatingThumbnail {
+            showThumbnail(nsThumbImage, captureType: .gif)
+        }
+
+        store.captureState = .completed
+    }
+
+    private func extractGIFFirstFrame(_ url: URL) -> CGImage? {
+        guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
     }
 
     private func showVideoTrimmer(_ url: URL) {
