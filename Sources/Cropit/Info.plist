@@ -20,8 +20,8 @@
     <true/>
     <key>NSScreenCaptureDescription</key>
     <string>Cropit needs screen recording permission to capture screenshots and record your screen.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Cropit can optionally record microphone audio during screen recordings.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Cropit can overlay your webcam video on screen recordings.</string>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>

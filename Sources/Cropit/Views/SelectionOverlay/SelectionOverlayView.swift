@@ -268,9 +268,10 @@ struct SelectionOverlayView: View {
     private var windowHighlight: some View {
         if !active, let win = highlightedWindow {
             ZStack(alignment: .topLeading) {
+                // Border-only highlight — no fill, so hovering a full-screen window
+                // doesn't tint the whole screen.
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.accentColor.opacity(0.12))
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.accentColor, lineWidth: 2))
+                    .stroke(Color.accentColor, lineWidth: 2.5)
                     .frame(width: win.rect.width, height: win.rect.height)
                     .position(x: win.rect.midX, y: win.rect.midY)
                 if !win.title.isEmpty {

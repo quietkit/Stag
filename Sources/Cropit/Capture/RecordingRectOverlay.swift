@@ -11,6 +11,8 @@ enum RecordingTargetSelector {
         let prefs = AppStore.shared.preferences
         let freeze = prefs.freezeScreenBeforeCapture
         let showMagnifier = prefs.showMagnifier
+        let dimOverlay = prefs.dimSelectionOverlay
+        let showCrosshair = prefs.showCrosshair
 
         async let compositeTask: CGImage? = (freeze || showMagnifier) ? (try? await ScreenComposite.capture()) : nil
         async let windowsTask: [DetectedWindow] = WindowEnumerator.enumerate()
@@ -22,9 +24,9 @@ enum RecordingTargetSelector {
                 let overlay = SelectionOverlayWindow(
                     frozenImage: freeze ? composite : nil,
                     sampleImage: composite,
-                    dimOverlay: prefs.dimSelectionOverlay,
+                    dimOverlay: dimOverlay,
                     showMagnifier: showMagnifier,
-                    showCrosshair: prefs.showCrosshair,
+                    showCrosshair: showCrosshair,
                     windows: windows
                 )
                 overlay.onRectSelected = { rect, displayID in
