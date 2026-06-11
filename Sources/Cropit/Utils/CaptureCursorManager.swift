@@ -52,12 +52,12 @@ final class CaptureCursorManager {
     // MARK: - Cursor creation
     private static func createCursor() -> NSCursor {
         // Small (18 × 18 pt) circle with a plus sign, double‑stroked for contrast.
-        let size: CGFloat = 20
+        let size: CGFloat = 22
         let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
             let cx = rect.midX, cy = rect.midY
-            let radius: CGFloat = 5.5
-            let crossLen: CGFloat = 8
+            let radius: CGFloat = 5
+            let crossLen: CGFloat = 10
 
             // Thin double‑stroke for subtle contrast.
             for (lw, color) in [

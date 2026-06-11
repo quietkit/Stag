@@ -258,8 +258,19 @@ final class CaptureManager {
     private func handleCapturedGIF(_ url: URL) {
         let prefs = store.preferences
 
-        // Extract first frame as thumbnail
-        guard let thumbFrame = extractGIFFirstFrame(url) else {
+        // Wait briefly for file to be fully written, then extract first frame
+        var thumbFrame: CGImage?
+        for attempt in 0..<3 {
+            if FileManager.default.fileExists(atPath: url.path) {
+                thumbFrame = extractGIFFirstFrame(url)
+                if thumbFrame != nil { break }
+            }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+        }
+
+        guard let thumbFrame = thumbFrame else {
             store.captureState = .completed
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
@@ -434,7 +445,8 @@ final class CaptureManager {
             let sample: CGImage? = showMagnifier ? try? await ScreenComposite.capture() : nil
             let overlay = SelectionOverlayWindow(frozenImage: nil, sampleImage: sample,
                                                  dimOverlay: dimOverlay, showMagnifier: showMagnifier,
-                                                 showCrosshair: prefs.showCrosshair, mode: .ocr)
+                                                 showCrosshair: prefs.showCrosshair, directCapture: prefs.directCapture,
+                                                 mode: .ocr)
             overlay.onCapture = { [weak self] cgImage in
                 guard let self else { return }
                 Task { @MainActor in

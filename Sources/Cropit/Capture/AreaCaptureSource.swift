@@ -15,11 +15,12 @@ final class AreaCaptureSource: CaptureSource {
         let sampleImage = composite                  // loupe always samples this when present
 
         let dimOverlay = store.preferences.dimSelectionOverlay
+        let directCapture = store.preferences.directCapture
         let image = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGImage, Error>) in
             DispatchQueue.main.async {
                 let overlay = SelectionOverlayWindow(frozenImage: frozenImage, sampleImage: sampleImage,
                                                      dimOverlay: dimOverlay, showMagnifier: showMagnifier,
-                                                     showCrosshair: showCrosshair, mode: .area)
+                                                     showCrosshair: showCrosshair, directCapture: directCapture, mode: .area)
                 overlay.onCapture = { image in
                     continuation.resume(returning: image)
                 }

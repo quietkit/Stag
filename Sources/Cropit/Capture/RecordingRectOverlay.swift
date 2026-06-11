@@ -13,6 +13,7 @@ enum RecordingTargetSelector {
         let showMagnifier = prefs.showMagnifier
         let dimOverlay = prefs.dimSelectionOverlay
         let showCrosshair = prefs.showCrosshair
+        let directCapture = prefs.directCapture
 
         let composite = (freeze || showMagnifier) ? (try? await ScreenComposite.capture()) : nil
 
@@ -24,6 +25,7 @@ enum RecordingTargetSelector {
                     dimOverlay: dimOverlay,
                     showMagnifier: showMagnifier,
                     showCrosshair: showCrosshair,
+                    directCapture: directCapture,
                     mode: mode
                 )
                 overlay.onRectSelected = { rect, displayID in
