@@ -31,7 +31,8 @@ final class CaptureHUDWindow: NSWindow {
     private let hostingView: NSHostingView<CaptureHUDContentView>
     private let hudState: HUDState
 
-    init(statusProvider: @escaping () -> String, onStop: @escaping () -> Void) {
+    /// Pass `onStop: nil` to show a progress HUD with no stop button.
+    init(statusProvider: @escaping () -> String, onStop: (() -> Void)? = nil) {
         let state = HUDState()
         state.setStatusProvider(statusProvider)
         state.onStop = onStop
@@ -58,6 +59,7 @@ final class CaptureHUDWindow: NSWindow {
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         ignoresMouseEvents = false   // must be false so the Stop button is clickable
+        sharingType = .none          // exclude from screen capture / GIF output
 
         hostingView.frame = NSRect(origin: .zero, size: size)
         hostingView.autoresizingMask = [.width, .height]
@@ -82,25 +84,33 @@ private struct CaptureHUDContentView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(.red)
-                .frame(width: 10, height: 10)
+            if state.onStop != nil {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 10, height: 10)
+            } else {
+                ProgressView()
+                    .scaleEffect(0.65)
+                    .frame(width: 16, height: 16)
+            }
 
             Text(state.displayText)
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundColor(.white)
                 .frame(minWidth: 70, alignment: .trailing)
 
-            Button(action: { state.onStop?() }) {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Color.red.opacity(0.8))
-                    .clipShape(Circle())
+            if let stop = state.onStop {
+                Button(action: stop) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                        .frame(width: 28, height: 28)
+                        .background(Color.red.opacity(0.8))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Stop")
             }
-            .buttonStyle(.plain)
-            .help("Stop")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
