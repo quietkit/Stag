@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT="Cropit"
+PROJECT="Stag"
 CONFIG="${1:-debug}"
-ENTITLEMENTS="Cropit.entitlements"
+ENTITLEMENTS="Stag.entitlements"
 APP_BUNDLE="build/$PROJECT.app"
 
 echo "Building ($CONFIG)..."
@@ -16,7 +16,7 @@ mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
 cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/$PROJECT"
 cp Sources/$PROJECT/Info.plist "$APP_BUNDLE/Contents/Info.plist"
-cp Sources/$PROJECT/Resources/Cropit.icns "$APP_BUNDLE/Contents/Resources/"
+cp Sources/$PROJECT/Resources/Stag.icns "$APP_BUNDLE/Contents/Resources/"
 
 # Apply hardened runtime + entitlements (required for screen recording)
 if [ -f "$ENTITLEMENTS" ]; then

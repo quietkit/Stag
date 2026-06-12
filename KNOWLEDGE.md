@@ -1,6 +1,6 @@
-# Cropit Feature Gap & Growth Plan (Token‑Efficient Summary)
+# Stag Feature Gap & Growth Plan (Token‑Efficient Summary)
 
-## What Shottr & CleanShot X have that Cropit lacks
+## What Shottr & CleanShot X have that Stag lacks
 - Floating toolbar that appears right after a capture for quick shape/blur/eyedropper actions.
 - Live preview while adjusting blur or pixelate size.
 - Dedicated color picker/eyedropper with HEX/RGB copy.
@@ -51,7 +51,7 @@
 - Multi‑monitor stitching errors → add DPI sanity checks, fallback option.
 
 ## Positioning copy (for marketing)
-> **Cropit – The free, open‑source alternative to Shottr & CleanShot X**
+> **Stag – The free, open‑source alternative to Shottr & CleanShot X**
 > - Instant capture + floating toolbar for on‑the‑fly annotations.
 > - Live blur/pixelate preview, built‑in color picker.
 > - Export to PNG, GIF, Video, **PDF**.
@@ -66,7 +66,7 @@
 - **Architecture**: macOS AppKit + SwiftUI hybrid (NSWindow + NSHostingView).
 - **Capture stack**: ScreenCaptureKit for video/GIF, ImageIO for GIF encoding (patches GIF87a → GIF89a), Vision for OCR (Arabic support via `automaticallyDetectsLanguage=true`, `usesLanguageCorrection=false`).
 - **Window lifecycle**: `WindowLifecycle` enum implements Shottr‑style activation policy – app launches as `.accessory`, switches to `.regular` when Editor/Settings/History open, returns to `.accessory` when all close.
-- **Preferences defaults**: auto‑copy, open‑in‑editor action, thumbnail disabled, save path `~/Desktop/Cropit Screenshots`, file prefix `Cropit_` (editable).
+- **Preferences defaults**: auto‑copy, open‑in‑editor action, thumbnail disabled, save path `~/Desktop/Stag Screenshots`, file prefix `Stag_` (editable).
 - **UI utilities**: custom `ToastWindow` (auto‑dismiss, non‑intrusive), thumbnail positioning based on screen visible frame, `FloatingThumbnailWindow`, `HistoryBrowserWindow`.
 - **GIF handling**: logical size × backingScaleFactor for retina, post‑encode byte‑patch for GIF89a compliance.
 - **Audio**: `MicrophoneCaptureManager` mixes system and mic audio via DSP normalization.
