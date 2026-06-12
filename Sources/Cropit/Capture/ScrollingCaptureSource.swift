@@ -11,6 +11,7 @@ final class ScrollingCaptureSource: CaptureSource {
         let image: CGImage = try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.main.async {
                 let overlay = ScrollingWindowPicker()
+                overlay.dimOverlay = store.preferences.dimSelectionOverlay
                 overlay.onWindowSelected = { [weak self] windowID in
                     overlay.close()
                     self?.overlayWindow = nil
@@ -38,79 +39,78 @@ final class ScrollingCaptureSource: CaptureSource {
         return .image(image)
     }
 
+    private var progressPhase: String = ""
+
     private func performScrollingCapture(windowID: CGWindowID) async throws -> CGImage {
         capturedWindowID = windowID
 
-        // Posting synthetic scroll events is silently dropped by macOS unless the
-        // app has Accessibility permission — without it we'd capture a single
-        // static frame and look broken. Check up front and tell the user.
-        guard Self.ensureAccessibilityPermission() else {
-            throw CaptureError.captureFailed(reason:
-                "Scrolling capture needs Accessibility permission to scroll the window.\n\n" +
-                "Enable Cropit in System Settings → Privacy & Security → Accessibility, then try again.")
-        }
-
-        // Get window info for dimensions
         guard let windowInfo = findWindowInfo(windowID: windowID) else {
             throw CaptureError.captureFailed(reason: "Window not found")
         }
-        let windowRect = windowInfo.rect
 
-        // Scroll events are routed by their screen location, so aim at the center
-        // of the target window regardless of where the cursor ended up.
-        // kCGWindowBounds and CGEvent.location share the same top-left global coords.
-        let scrollPoint = CGPoint(x: windowRect.midX, y: windowRect.midY)
-
-        // Bring the target app forward once and let it settle before scrolling.
+        // Bring the target window to front so the user can scroll it.
         if let app = NSRunningApplication(processIdentifier: windowInfo.pid) {
             app.activate(options: .activateIgnoringOtherApps)
         }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(nanoseconds: 200_000_000)
 
-        // First capture
-        let firstImage = try await captureWindowImage(windowID: windowID)
-        var frames: [(image: CGImage, rect: CGRect)] = [(firstImage, windowRect)]
+        // Capture frames as the user manually scrolls. Poll every 250ms and add a
+        // frame whenever the window content has changed since the last snapshot.
+        var frames: [CGImage] = []
+        var lastFrame: CGImage? = nil
+        var isDone = false
+        progressPhase = "Scroll — 0 frames"
 
-        // Scroll the window down a page at a time, capturing as we go.
-        let visibleHeight = windowRect.height
-        let pageScroll = max(40, Int(visibleHeight * 0.85))   // overlap so stitching can align
-        var scrollAttempts = 0
-        let maxScrollAttempts = 40
-        var lastImage = firstImage
-        var hasMoreContent = true
+        let hud = CaptureHUDWindow(
+            statusProvider: { [weak self] in self?.progressPhase ?? "" },
+            onStop: { isDone = true }
+        )
+        hud.sharingType = .none
+        hud.show()
 
-        while hasMoreContent && scrollAttempts < maxScrollAttempts {
-            scrollAttempts += 1
+        // Initial frame.
+        if let img = try? await captureWindowImage(windowID: windowID) {
+            frames.append(img)
+            lastFrame = img
+            progressPhase = "Scroll — 1 frame  (■ when done)"
+        }
 
-            scrollWindow(at: scrollPoint, pixels: pageScroll)
-            try await Task.sleep(nanoseconds: 350_000_000)
+        while !isDone {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            guard !isDone else { break }
 
-            let newImage = try await captureWindowImage(windowID: windowID)
-
-            // If the frame is identical to the previous one, we've hit the bottom.
-            if imagesEqual(newImage, lastImage) {
-                hasMoreContent = false
-                break
+            guard let img = try? await captureWindowImage(windowID: windowID) else { continue }
+            if let last = lastFrame, framesDiffer(img, last) {
+                frames.append(img)
+                lastFrame = img
+                progressPhase = "Scroll — \(frames.count) frames  (■ when done)"
             }
-
-            frames.append((newImage, windowRect))
-            lastImage = newImage
         }
 
-        // Scroll back to the top so we leave the window as we found it.
-        for _ in 0..<scrollAttempts {
-            scrollWindow(at: scrollPoint, pixels: -pageScroll)
+        hud.close()
+
+        guard !frames.isEmpty else {
+            throw CaptureError.captureFailed(reason: "No frames captured")
         }
 
-        return try stitchWithOverlap(frames.map { $0.image })
+        progressPhase = "Stitching \(frames.count) frames..."
+        return try stitchWithOverlap(frames)
     }
 
-    /// True when the app is trusted for Accessibility (required to post scroll
-    /// events). Prompts the user with the system dialog on first failure.
-    private static func ensureAccessibilityPermission() -> Bool {
-        if AXIsProcessTrusted() { return true }
-        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        return AXIsProcessTrustedWithOptions(opts)
+    /// Faster than full pixel comparison — samples rows from the middle of the image.
+    /// Sufficient to detect a scroll (content shifts vertically).
+    private func framesDiffer(_ a: CGImage, _ b: CGImage) -> Bool {
+        guard a.width == b.width, a.height == b.height else { return true }
+        guard let da = a.dataProvider?.data, let db = b.dataProvider?.data,
+              let pa = CFDataGetBytePtr(da), let pb = CFDataGetBytePtr(db) else { return true }
+        let bytesPerRow = a.width * 4
+        let h = a.height
+        // Sample ~20 rows from the middle half of the image.
+        for row in stride(from: h / 4, through: 3 * h / 4, by: max(1, h / 20)) {
+            let off = row * bytesPerRow
+            if memcmp(pa + off, pb + off, bytesPerRow) != 0 { return true }
+        }
+        return false
     }
 
     private func imagesEqual(_ a: CGImage, _ b: CGImage) -> Bool {
@@ -139,16 +139,6 @@ final class ScrollingCaptureSource: CaptureSource {
             return WindowInfo(rect: rect, pid: pid)
         }
         return nil
-    }
-
-    private func scrollWindow(at point: CGPoint, pixels: Int) {
-        // Pixel units give a predictable, overlap-friendly scroll distance.
-        // Negative wheel1 advances content downward (page-down).
-        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
-                            wheelCount: 1, wheel1: Int32(-pixels), wheel2: 0, wheel3: 0)
-        // Route the scroll to the target window, not wherever the cursor is.
-        event?.location = point
-        event?.post(tap: .cghidEventTap)
     }
 
     private func captureWindowImage(windowID: CGWindowID) async throws -> CGImage {
@@ -277,8 +267,10 @@ final class ScrollingCaptureSource: CaptureSource {
 final class ScrollingWindowPicker: NSWindow {
     var onWindowSelected: ((CGWindowID) -> Void)?
     var onCancel: (() -> Void)?
+    var dimOverlay: Bool = true
 
     private let pickerView: ScrollingPickerContentView
+    private var mouseMonitor: Any?
 
     init() {
         let totalFrame = NSScreen.screens.reduce(NSZeroRect) { $0.union($1.frame) }
@@ -301,9 +293,24 @@ final class ScrollingWindowPicker: NSWindow {
     }
 
     func show() {
+        pickerView.dimOverlay = dimOverlay
+        pickerView.windowRef = self
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        pickerView.windowRef = self
+
+        // Local event monitor is more reliable than NSTrackingArea for overlay
+        // windows that become active just before the user hovers over them.
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            self?.forwardMouseMoved(event)
+            return event
+        }
+        // Highlight the window under the current cursor position immediately.
+        forwardCursorPosition(NSEvent.mouseLocation)
+    }
+
+    override func close() {
+        if let mon = mouseMonitor { NSEvent.removeMonitor(mon); mouseMonitor = nil }
+        super.close()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -317,15 +324,34 @@ final class ScrollingWindowPicker: NSWindow {
 
     override var canBecomeKey: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+
+    private func forwardMouseMoved(_ event: NSEvent) {
+        let pt = event.locationInWindow
+        let fr = frame
+        // Convert window-local coords (y-up) to CG window-list coords (y-down).
+        forwardCursorPosition(NSPoint(x: pt.x + fr.origin.x,
+                                      y: fr.origin.y + fr.height - pt.y))
+    }
+
+    private func forwardCursorPosition(_ appKitScreen: NSPoint) {
+        let fr = frame
+        // NSEvent.mouseLocation and window frame share AppKit screen space (y-up,
+        // origin = bottom-left of primary screen). kCGWindowBounds uses CG space
+        // (y-down, origin = top-left of primary screen). Convert once here.
+        let cgX = appKitScreen.x
+        let cgY = fr.origin.y + fr.height - appKitScreen.y
+        pickerView.handleCursorAt(NSPoint(x: cgX, y: cgY))
+    }
 }
 
 final class ScrollingPickerContentView: NSView {
     var highlightedWindowID: CGWindowID?
+    var dimOverlay: Bool = true
     weak var windowRef: NSWindow?
 
     private var highlightedWindowRect: NSRect?
     private var highlightedWindowName: String?
-    private var trackingArea: NSTrackingArea?
+    private var screenPoint: NSPoint = .zero
 
     override var isFlipped: Bool { true }
 
@@ -336,35 +362,9 @@ final class ScrollingPickerContentView: NSView {
 
     required init?(coder: NSCoder) { nil }
 
-    override func updateTrackingAreas() {
-        if let ta = trackingArea { removeTrackingArea(ta) }
-        trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseMoved, .activeInActiveApp, .inVisibleRect, .mouseEnteredAndExited],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea!)
-        super.updateTrackingAreas()
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let viewPoint = event.locationInWindow
-        screenPoint = convertToScreenCoords(viewPoint)
+    func handleCursorAt(_ cgPoint: NSPoint) {
+        screenPoint = cgPoint
         findWindow()
-    }
-
-    private var screenPoint: NSPoint = .zero
-
-    private func convertToScreenCoords(_ viewPoint: NSPoint) -> NSPoint {
-        guard let w = windowRef ?? window else { return viewPoint }
-        let frame = w.frame
-        if isFlipped {
-            return NSPoint(x: viewPoint.x + frame.origin.x,
-                           y: frame.origin.y + frame.height - viewPoint.y)
-        }
-        return NSPoint(x: viewPoint.x + frame.origin.x,
-                       y: viewPoint.y + frame.origin.y)
     }
 
     private func findWindow() {
@@ -413,10 +413,34 @@ final class ScrollingPickerContentView: NSView {
               let w = windowRef ?? window
         else { return }
 
-        ctx.setFillColor(Palette.dimOverlay)
-        ctx.fill(dirtyRect)
+        if dimOverlay {
+            ctx.setFillColor(Palette.dimOverlay)
+            ctx.fill(dirtyRect)
+        }
 
-        guard let rect = highlightedWindowRect, let name = highlightedWindowName else { return }
+        guard let rect = highlightedWindowRect, let name = highlightedWindowName else {
+            // No window highlighted yet — draw instruction text so the user knows what to do.
+            let text = "Click a window to start scrolling capture" as NSString
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 18, weight: .semibold),
+                .foregroundColor: NSColor.white
+            ]
+            let sz = text.size(withAttributes: attrs)
+            text.draw(at: NSPoint(x: (bounds.width - sz.width) / 2,
+                                  y: (bounds.height - sz.height) / 2),
+                      withAttributes: attrs)
+
+            let hint = "Then scroll the window — click ■ when done" as NSString
+            let hintAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 13, weight: .regular),
+                .foregroundColor: NSColor(white: 1, alpha: 0.65)
+            ]
+            let hintSz = hint.size(withAttributes: hintAttrs)
+            hint.draw(at: NSPoint(x: (bounds.width - hintSz.width) / 2,
+                                  y: (bounds.height - sz.height) / 2 - hintSz.height - 6),
+                      withAttributes: hintAttrs)
+            return
+        }
 
         let viewRect = screenRectToView(rect, window: w)
 
