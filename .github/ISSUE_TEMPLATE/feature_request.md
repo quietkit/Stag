@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for Cropit
+about: Suggest an idea for Stag
 title: ''
 labels: enhancement
 assignees: ''

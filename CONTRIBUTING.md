@@ -1,4 +1,4 @@
-# Contributing to Cropit
+# Contributing to Stag
 
 We welcome contributions! Here's how to get started.
 
@@ -43,8 +43,8 @@ Open a [feature request](.github/ISSUE_TEMPLATE/feature_request.md) with:
 
 ```bash
 # Clone and build
-git clone https://github.com/your-username/cropit.git
-cd cropit
+git clone https://github.com/your-username/stag.git
+cd stag
 ./build.sh
 
 # Run tests (if available)
@@ -53,11 +53,11 @@ swift test
 
 ## Code Signing
 
-The build script prefers the "Cropit Code Signing" identity. To create it:
+The build script prefers the "Stag Code Signing" identity. To create it:
 
 ```bash
-security create-keychain -p temp cropit-build.keychain
-security import dev/certificate.p12 -k ~/Library/Keychains/cropit-build.keychain
+security create-keychain -p temp stag-build.keychain
+security import dev/certificate.p12 -k ~/Library/Keychains/stag-build.keychain
 ```
 
 Or use ad-hoc signing (the build script falls back automatically).

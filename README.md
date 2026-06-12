@@ -1,9 +1,9 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Sources/Cropit/Resources/icon_256x256@2x.png">
-  <img src="Sources/Cropit/Resources/icon_256x256@2x.png" width="128" alt="Cropit">
+  <source media="(prefers-color-scheme: dark)" srcset="Sources/Stag/Resources/icon_256x256@2x.png">
+  <img src="Sources/Stag/Resources/icon_256x256@2x.png" width="128" alt="Stag">
 </picture>
 
-# Cropit
+# Stag
 
 > A powerful, privacy-first macOS screenshot and screen recording tool — built entirely with Swift and Apple frameworks. No telemetry. No accounts. No cloud. Your data stays on your Mac.
 
@@ -16,7 +16,7 @@
 
 ## Privacy
 
-**Cropit has zero third-party dependencies and makes zero unsolicited network requests.**
+**Stag has zero third-party dependencies and makes zero unsolicited network requests.**
 
 | Claim | Verified |
 |---|---|
@@ -24,7 +24,7 @@
 | No crash reporters | ✅ No Sentry, Crashlytics, or Bugsnag |
 | No tracking pixels or beacons | ✅ The only network code is `ImageUploader.swift` — user-configured, opt-in, points to your own endpoint |
 | No third-party dependencies | ✅ `Package.resolved` does not exist — only Apple system frameworks are imported |
-| Data stored locally | ✅ History in `~/Library/Application Support/Cropit/`, preferences in `UserDefaults` |
+| Data stored locally | ✅ History in `~/Library/Application Support/Stag/`, preferences in `UserDefaults` |
 | Open source | ✅ MIT license — read every line |
 
 The complete list of imported frameworks: `AppKit`, `AVFoundation`, `Carbon`, `Cocoa`, `Combine`, `CoreGraphics`, `CoreImage`, `CoreMedia`, `Foundation`, `ImageIO`, `OSLog`, `ScreenCaptureKit`, `SwiftUI`, `UniformTypeIdentifiers`, `Vision`. All Apple, all auditable.
@@ -131,36 +131,36 @@ Modern System Settings-inspired design with six tabs:
 
 ## CLI Tool
 
-Cropit ships a command-line tool (`cropit-cli`) for scripting and automation.
+Stag ships a command-line tool (`stag-cli`) for scripting and automation.
 
 ### Build & install
 
 ```bash
-swift build -c release --target cropit-cli
-cp .build/release/cropit-cli /usr/local/bin/cropit
+swift build -c release --target stag-cli
+cp .build/release/stag-cli /usr/local/bin/stag
 ```
 
 ### Commands
 
 ```bash
 # Trigger captures
-cropit capture --area                             # Fires area capture in the running app
-cropit capture --fullscreen --wait                # Waits for the file; prints path to stdout
-cropit capture --area --output ~/Desktop/out.png  # Captures and copies to path
+stag capture --area                             # Fires area capture in the running app
+stag capture --fullscreen --wait                # Waits for the file; prints path to stdout
+stag capture --area --output ~/Desktop/out.png  # Captures and copies to path
 
 # All capture types
-cropit capture --area | --window | --fullscreen | --scrolling | --gif | --recording
+stag capture --area | --window | --fullscreen | --scrolling | --gif | --recording
 
 # Browse history
-cropit history                                    # Last 50 captures (plain text)
-cropit history --limit 10 --format json           # Last 10 as JSON array
-cropit history --type area --favorites            # Starred area captures
+stag history                                    # Last 50 captures (plain text)
+stag history --limit 10 --format json           # Last 10 as JSON array
+stag history --type area --favorites            # Starred area captures
 
 # Metadata
-cropit export ~/Desktop/Cropit_screenshot.png     # Writes .json sidecar, prints path
+stag export ~/Desktop/Stag_screenshot.png     # Writes .json sidecar, prints path
 
 # Open in editor
-cropit open ~/Desktop/Cropit_screenshot.png
+stag open ~/Desktop/Stag_screenshot.png
 ```
 
 ### Automator
@@ -168,7 +168,7 @@ cropit open ~/Desktop/Cropit_screenshot.png
 Use the CLI in an Automator "Run Shell Script" action:
 
 ```bash
-/usr/local/bin/cropit capture --area --wait
+/usr/local/bin/stag capture --area --wait
 ```
 
 ---
@@ -178,17 +178,17 @@ Use the CLI in an Automator "Run Shell Script" action:
 Trigger any capture from Raycast, Alfred, browser bookmarks, or scripts:
 
 ```
-cropit://capture                     # Area capture (default)
-cropit://capture?type=area
-cropit://capture?type=window
-cropit://capture?type=fullscreen
-cropit://capture?type=scrolling
-cropit://capture?type=recording
-cropit://capture?type=gif
-cropit://capture?delay=5             # 5-second self-timer
-cropit://preferences                 # Open Settings
-cropit://history                     # Open History Browser
-cropit://pinboard                    # Open Pinboard
+stag://capture                     # Area capture (default)
+stag://capture?type=area
+stag://capture?type=window
+stag://capture?type=fullscreen
+stag://capture?type=scrolling
+stag://capture?type=recording
+stag://capture?type=gif
+stag://capture?delay=5             # 5-second self-timer
+stag://preferences                 # Open Settings
+stag://history                     # Open History Browser
+stag://pinboard                    # Open Pinboard
 ```
 
 ---
@@ -198,12 +198,12 @@ cropit://pinboard                    # Open Pinboard
 ### Build from source
 
 ```bash
-git clone https://github.com/your-username/cropit.git
-cd cropit
+git clone https://github.com/your-username/stag.git
+cd stag
 ./build.sh
 ```
 
-The built `.app` opens automatically. Drag `build/Cropit.app` to Applications to keep it.
+The built `.app` opens automatically. Drag `build/Stag.app` to Applications to keep it.
 
 > **First run:** macOS will prompt for Screen Recording permission in  
 > **System Settings → Privacy & Security → Screen Recording**.  
@@ -212,7 +212,7 @@ The built `.app` opens automatically. Drag `build/Cropit.app` to Applications to
 ### Homebrew (planned)
 
 ```bash
-brew install cropit
+brew install stag
 ```
 
 ---
@@ -231,24 +231,24 @@ brew install cropit
 ./build.sh release   # Release build
 ```
 
-The script runs `swift build`, assembles the `.app` bundle, and code-signs with your "Cropit Code Signing" identity (falls back to ad-hoc).
+The script runs `swift build`, assembles the `.app` bundle, and code-signs with your "Stag Code Signing" identity (falls back to ad-hoc).
 
 ### CLI tool
 
 ```bash
-swift build --target cropit-cli         # debug
-swift build -c release --target cropit-cli   # release
+swift build --target stag-cli         # debug
+swift build -c release --target stag-cli   # release
 ```
 
 ### Project structure
 
 ```
 Sources/
-├── Cropit/
-│   ├── CropitApp.swift              # @main
+├── Stag/
+│   ├── StagApp.swift              # @main
 │   ├── AppDelegate.swift            # Menu bar, global hotkeys, URL scheme
 │   ├── CaptureManager.swift         # Capture orchestration
-│   ├── URLSchemeHandler.swift       # cropit:// URL parsing
+│   ├── URLSchemeHandler.swift       # stag:// URL parsing
 │   ├── Capture/                     # Area, Window, Fullscreen, Scrolling, GIF sources
 │   ├── Recording/                   # ScreenRecorder, GIFRecorder, webcam, mic, compositor
 │   ├── Views/
@@ -259,7 +259,7 @@ Sources/
 │   │   └── PreferencesWindow.swift  # System Settings-inspired UI
 │   ├── Models/                      # Preferences, AppStore, CaptureHistoryStore
 │   └── Utils/                       # CaptureCursorManager, Palette, RecordBorderOverlay
-└── CropitCLI/
+└── StagCLI/
     └── main.swift                   # CLI tool (capture, history, export, open)
 ```
 

@@ -25,7 +25,7 @@ If applicable, add screenshots to help explain the problem.
 **Environment**
 - macOS version: [e.g. 14.5, 15.0]
 - Build method: [self-built, Homebrew, downloaded release]
-- Cropit version: [e.g. 1.0.0, commit hash]
+- Stag version: [e.g. 1.0.0, commit hash]
 
 **Additional context**
 Any other context about the problem.
