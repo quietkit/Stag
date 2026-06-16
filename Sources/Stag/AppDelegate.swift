@@ -507,9 +507,6 @@ private func capture(_ title: String, _ action: Selector,
     @objc private func captureGIF() { captureManager.startCapture(type: .gif) }
 
     @MainActor
-    @objc private func captureAction() { captureManager.startCapture(type: .area) }
-
-    @MainActor
     @objc private func captureOCR() { captureManager.startOCRCapture() }
 
     @objc private func quitApp() { NSApplication.shared.terminate(nil) }
