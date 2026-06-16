@@ -337,9 +337,12 @@ private func capture(_ title: String, _ action: Selector,
                               MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
             // Record the source app synchronously, while it's still frontmost.
             CaptureContext.shared.recordFrontmostApp()
+            // Capture an immutable copy of the id — the `var hotkeyID` itself cannot
+            // be referenced from the concurrently-executing @MainActor task.
+            let firedHotkeyID = hotkeyID.id
             Task { @MainActor in
                 NSApp.activate(ignoringOtherApps: true)
-                delegate.handleCarbonHotkey(id: hotkeyID.id)
+                delegate.handleCarbonHotkey(id: firedHotkeyID)
             }
             return noErr
         }, 1, &eventSpec, selfPtr, &carbonEventHandler)
