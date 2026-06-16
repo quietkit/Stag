@@ -6,8 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(name: "Stag", path: "Sources/Stag", exclude: ["Info.plist"], resources: [.process("Resources")]),
-        .executableTarget(name: "stag-cli", path: "Sources/StagCLI",
-                          swiftSettings: [.unsafeFlags(["-parse-as-library"], .when(configuration: .release))]),
+        .executableTarget(name: "stag-cli", path: "Sources/StagCLI"),
         .testTarget(name: "StagTests", dependencies: ["Stag"], path: "Tests/StagTests")
     ]
 )

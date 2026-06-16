@@ -113,13 +113,6 @@ final class ScrollingCaptureSource: CaptureSource {
         return false
     }
 
-    private func imagesEqual(_ a: CGImage, _ b: CGImage) -> Bool {
-        guard a.width == b.width, a.height == b.height,
-              let da = a.dataProvider?.data, let db = b.dataProvider?.data,
-              CFDataGetLength(da) == CFDataGetLength(db) else { return false }
-        return memcmp(CFDataGetBytePtr(da), CFDataGetBytePtr(db), CFDataGetLength(da)) == 0
-    }
-
     private struct WindowInfo {
         let rect: CGRect
         let pid: pid_t
