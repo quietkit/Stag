@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   build:
@@ -17,3 +17,5 @@ jobs:
         run: swift build
       - name: Build (release)
         run: swift build -c release
+      - name: Test
+        run: swift test
