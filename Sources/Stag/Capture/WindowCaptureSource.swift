@@ -199,7 +199,7 @@ final class WindowPickerContentView: NSView {
 
         guard let rect = highlightedWindowRect, let name = highlightedWindowName else { return }
 
-        let viewRect = screenRectToView(rect, window: w)
+        let viewRect = WindowRectMapper.screenRectToView(rect, windowFrame: w.frame, isFlipped: isFlipped)
 
         // Highlight border
         ctx.setStrokeColor(CGColor(red: 0.25, green: 0.5, blue: 1, alpha: 0.9))
@@ -212,7 +212,7 @@ final class WindowPickerContentView: NSView {
         let handleSize: CGFloat = 8
         let half = handleSize / 2
         ctx.setFillColor(CGColor(red: 0.25, green: 0.5, blue: 1, alpha: 1))
-        for corner in cornerPoints(rect: viewRect) {
+        for corner in WindowRectMapper.cornerPoints(of: viewRect) {
             ctx.fillEllipse(in: CGRect(x: corner.x - half, y: corner.y - half, width: handleSize, height: handleSize))
         }
 
@@ -239,30 +239,4 @@ final class WindowPickerContentView: NSView {
         .foregroundColor: NSColor.white
     ]
 
-    private func screenRectToView(_ screenRect: NSRect, window: NSWindow) -> NSRect {
-        let frame = window.frame
-        if isFlipped {
-            return NSRect(
-                x: screenRect.minX - frame.minX,
-                y: frame.height - screenRect.maxY + frame.minY,
-                width: screenRect.width,
-                height: screenRect.height
-            )
-        }
-        return NSRect(
-            x: screenRect.minX - frame.minX,
-            y: screenRect.minY - frame.minY,
-            width: screenRect.width,
-            height: screenRect.height
-        )
-    }
-
-    private func cornerPoints(rect: NSRect) -> [NSPoint] {
-        [
-            NSPoint(x: rect.minX, y: rect.minY),
-            NSPoint(x: rect.maxX, y: rect.minY),
-            NSPoint(x: rect.maxX, y: rect.maxY),
-            NSPoint(x: rect.minX, y: rect.maxY),
-        ]
-    }
 }
