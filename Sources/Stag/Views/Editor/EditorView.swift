@@ -73,8 +73,7 @@ struct EditorView: View {
     @State private var rotation: CGFloat = 0
 
     // Image undo stack (for destructive edits)
-    @State private var imageUndoStack: [NSImage] = []
-    @State private var imageRedoStack: [NSImage] = []
+    @State private var imageHistory = BoundedHistory<NSImage>(limit: 20)
     @State private var cloneStampSource: CGPoint?
     @State private var removeBgRunning = false
     @State private var eraserSwipePoints: [CGPoint] = []
@@ -1230,16 +1229,13 @@ struct EditorView: View {
     }
 
     private func pushUndoImage() {
-        imageUndoStack.append(workingImage)
-        if imageUndoStack.count > 20 { imageUndoStack.removeFirst() }
-        imageRedoStack.removeAll()
+        imageHistory.record(workingImage)
         pushUndo()
     }
 
     private func undo() {
-        if !imageUndoStack.isEmpty {
-            imageRedoStack.append(workingImage)
-            workingImage = imageUndoStack.removeLast()
+        if let image = imageHistory.undo(current: workingImage) {
+            workingImage = image
         }
         let current = CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation)
         guard let state = canvasHistory.undo(current: current) else { return }
@@ -1250,9 +1246,8 @@ struct EditorView: View {
     }
 
     private func redo() {
-        if !imageRedoStack.isEmpty {
-            imageUndoStack.append(workingImage)
-            workingImage = imageRedoStack.removeLast()
+        if let image = imageHistory.redo(current: workingImage) {
+            workingImage = image
         }
         let current = CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation)
         guard let state = canvasHistory.redo(current: current) else { return }
@@ -1853,7 +1848,7 @@ struct EditorView: View {
 
     /// True when the user has made any change worth persisting.
     private var hasEdits: Bool {
-        !annotations.isEmpty || rotation != 0 || backdrop.isActive || !imageUndoStack.isEmpty
+        !annotations.isEmpty || rotation != 0 || backdrop.isActive || imageHistory.canUndo
     }
 
     /// Writes the edited image back to its source file synchronously (for ⌘S and safety-net onDisappear).
