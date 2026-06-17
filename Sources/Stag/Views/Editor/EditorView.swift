@@ -1743,14 +1743,7 @@ struct EditorView: View {
     // MARK: - Color History
 
     private func recordColorUsage(_ color: Color) {
-        // Remove if already in history
-        colorHistory.removeAll { $0 == color }
-        // Add to beginning
-        colorHistory.insert(color, at: 0)
-        // Keep only last 8
-        if colorHistory.count > 8 {
-            colorHistory.removeLast()
-        }
+        colorHistory = RecentColors.recording(color, into: colorHistory)
     }
 
     // MARK: - Arrow Head Drawing
