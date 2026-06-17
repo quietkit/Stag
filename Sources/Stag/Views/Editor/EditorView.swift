@@ -18,8 +18,7 @@ struct EditorView: View {
     }
 
     // Undo / Redo
-    @State private var undoStack: [CanvasState] = []
-    @State private var redoStack: [CanvasState] = []
+    @State private var canvasHistory = CanvasHistory()
 
     // Canvas state
     @State private var annotations: [Annotation] = []
@@ -1227,9 +1226,7 @@ struct EditorView: View {
     // MARK: - Undo / Redo / Delete
 
     private func pushUndo() {
-        undoStack.append(CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation))
-        if undoStack.count > 100 { undoStack.removeFirst() }
-        redoStack.removeAll()
+        canvasHistory.record(CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation))
     }
 
     private func pushUndoImage() {
@@ -1244,9 +1241,8 @@ struct EditorView: View {
             imageRedoStack.append(workingImage)
             workingImage = imageUndoStack.removeLast()
         }
-        guard !undoStack.isEmpty else { return }
-        redoStack.append(CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation))
-        let state = undoStack.removeLast()
+        let current = CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation)
+        guard let state = canvasHistory.undo(current: current) else { return }
         annotations = state.annotations
         currentTool = state.currentTool
         selectedAnnotationId = state.selectedAnnotationId
@@ -1258,9 +1254,8 @@ struct EditorView: View {
             imageUndoStack.append(workingImage)
             workingImage = imageRedoStack.removeLast()
         }
-        guard !redoStack.isEmpty else { return }
-        undoStack.append(CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation))
-        let state = redoStack.removeLast()
+        let current = CanvasState(annotations: annotations, currentTool: currentTool, selectedAnnotationId: selectedAnnotationId, rotation: rotation)
+        guard let state = canvasHistory.redo(current: current) else { return }
         annotations = state.annotations
         currentTool = state.currentTool
         selectedAnnotationId = state.selectedAnnotationId
@@ -1709,8 +1704,8 @@ struct EditorView: View {
 
     private var actionButtons: some View {
         HStack(spacing: 1) {
-            actionButton("arrow.uturn.backward", "Undo (⌘Z)", undo, !undoStack.isEmpty)
-            actionButton("arrow.uturn.forward", "Redo (⇧⌘Z)", redo, !redoStack.isEmpty)
+            actionButton("arrow.uturn.backward", "Undo (⌘Z)", undo, canvasHistory.canUndo)
+            actionButton("arrow.uturn.forward", "Redo (⇧⌘Z)", redo, canvasHistory.canRedo)
             actionButton("trash", "Delete (⌫)", deleteSelected, selectedAnnotationId != nil)
             toolbarDivider
             actionButton("doc.on.clipboard", "Copy (⌘C)", exportAndCopy, true)
