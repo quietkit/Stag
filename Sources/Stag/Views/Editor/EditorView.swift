@@ -384,8 +384,7 @@ struct EditorView: View {
             case (8, _) where mods == [.command]: // ⌘C — save edits, copy, dismiss
                 // Render once; use for both clipboard copy and background save.
                 if let exported = exportImage() {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.writeObjects([exported])
+                    Clipboard.copy(image: exported)
                     if hasEdits, let path = filePath {
                         backgroundSaveInFlight = true
                         Self.backgroundWrite(exported, to: path)
@@ -999,8 +998,7 @@ struct EditorView: View {
         let r = pixel[0], g = pixel[1], b = pixel[2]
         let hex = String(format: "#%02X%02X%02X", r, g, b)
         currentColor = Color(red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(hex, forType: .string)
+        Clipboard.copy(text: hex)
         eyedropperPickedHex = hex
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             if eyedropperPickedHex == hex { eyedropperPickedHex = nil }
@@ -1145,7 +1143,7 @@ struct EditorView: View {
     }
 
     private func pasteImage() {
-        guard let data = NSPasteboard.general.data(forType: .png), let img = NSImage(data: data) else { return }
+        guard let img = Clipboard.image() else { return }
         // Create a new editor window with the pasted image
         let editor = EditorWindow(image: img)
         editor.show()
@@ -1845,8 +1843,7 @@ struct EditorView: View {
 
     private func exportAndCopy() {
         guard let exported = exportImage() else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([exported])
+        Clipboard.copy(image: exported)
     }
 
     private func exportAndSave() {
@@ -2149,8 +2146,7 @@ struct EditorView: View {
                     self.ocrAlertMessage = "No text found in image."
                     return
                 }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(result, forType: .string)
+                Clipboard.copy(text: result)
                 self.ocrAlertMessage = "Copied \(texts.count) line(s) to clipboard."
             }
         }
@@ -2177,8 +2173,7 @@ struct EditorView: View {
                     return
                 }
                 let combined = payloads.joined(separator: "\n")
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(combined, forType: .string)
+                Clipboard.copy(text: combined)
                 // If it looks like a URL, offer to open it
                 if let first = payloads.first, let url = URL(string: first), url.scheme != nil {
                     let alert = NSAlert()
@@ -2214,8 +2209,7 @@ struct EditorView: View {
                 let link = try await ImageUploader.upload(png, config: config)
                 await MainActor.run {
                     self.uploading = false
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(link, forType: .string)
+                    Clipboard.copy(text: link)
                     ToastWindow.show("Link copied to clipboard", icon: "link", iconColor: .green)
                 }
             } catch {
