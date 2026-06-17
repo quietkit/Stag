@@ -435,7 +435,7 @@ final class ScrollingPickerContentView: NSView {
             return
         }
 
-        let viewRect = screenRectToView(rect, window: w)
+        let viewRect = WindowRectMapper.screenRectToView(rect, windowFrame: w.frame, isFlipped: isFlipped)
 
         ctx.setStrokeColor(Palette.accentGreen)
         ctx.setLineWidth(3)
@@ -446,7 +446,7 @@ final class ScrollingPickerContentView: NSView {
         let handleSize: CGFloat = 8
         let half = handleSize / 2
         ctx.setFillColor(Palette.accentGreenFill)
-        for corner in cornerPoints(rect: viewRect) {
+        for corner in WindowRectMapper.cornerPoints(of: viewRect) {
             ctx.fillEllipse(in: CGRect(x: corner.x - half, y: corner.y - half, width: handleSize, height: handleSize))
         }
 
@@ -492,30 +492,4 @@ final class ScrollingPickerContentView: NSView {
         .foregroundColor: NSColor.white
     ]
 
-    private func screenRectToView(_ screenRect: NSRect, window: NSWindow) -> NSRect {
-        let frame = window.frame
-        if isFlipped {
-            return NSRect(
-                x: screenRect.minX - frame.minX,
-                y: frame.height - screenRect.maxY + frame.minY,
-                width: screenRect.width,
-                height: screenRect.height
-            )
-        }
-        return NSRect(
-            x: screenRect.minX - frame.minX,
-            y: screenRect.minY - frame.minY,
-            width: screenRect.width,
-            height: screenRect.height
-        )
-    }
-
-    private func cornerPoints(rect: NSRect) -> [NSPoint] {
-        [
-            NSPoint(x: rect.minX, y: rect.minY),
-            NSPoint(x: rect.maxX, y: rect.minY),
-            NSPoint(x: rect.maxX, y: rect.maxY),
-            NSPoint(x: rect.minX, y: rect.maxY),
-        ]
-    }
 }
