@@ -996,7 +996,7 @@ struct EditorView: View {
         ctx.draw(cgImage, in: CGRect(x: -CGFloat(pxX), y: -CGFloat(pxY),
                                      width: CGFloat(cgImage.width), height: CGFloat(cgImage.height)))
         let r = pixel[0], g = pixel[1], b = pixel[2]
-        let hex = String(format: "#%02X%02X%02X", r, g, b)
+        let hex = HexColor.string(r: Int(r), g: Int(g), b: Int(b))
         currentColor = Color(red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255)
         Clipboard.copy(text: hex)
         eyedropperPickedHex = hex
@@ -1606,11 +1606,7 @@ struct EditorView: View {
     }
 
     private func colorHex(_ color: Color) -> String {
-        let ns = NSColor(color).usingColorSpace(.sRGB)!
-        let r = Int(ns.redComponent * 255)
-        let g = Int(ns.greenComponent * 255)
-        let b = Int(ns.blueComponent * 255)
-        return "#\(String(format: "%02X%02X%02X", r, g, b))"
+        HexColor.string(from: color)
     }
 
     private var colorPickerButton: some View {
