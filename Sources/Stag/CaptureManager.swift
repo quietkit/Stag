@@ -206,8 +206,7 @@ final class CaptureManager {
         let prefs = store.preferences
 
         if prefs.autoCopyToClipboard {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([nsImage])
+            Clipboard.copy(image: nsImage)
         }
         switch prefs.afterCaptureAction {
         case .showOverlay, .ask:
@@ -220,8 +219,7 @@ final class CaptureManager {
             saveImage(nsImage, type: type, addToHistory: true)
         case .copy:
             if prefs.automaticSave { saveImage(nsImage, type: type, addToHistory: true) }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([nsImage])
+            Clipboard.copy(image: nsImage)
         case .openEditor:
             // Save first (when auto-save is on) and hand the editor the file path so
             // edits can be written back to it (and the history thumbnail refreshed).
@@ -251,8 +249,7 @@ final class CaptureManager {
         }
 
         store.captureState = .completed
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
+        Clipboard.copy(text: url.lastPathComponent)
     }
 
     private func handleCapturedGIF(_ url: URL) {
@@ -272,16 +269,14 @@ final class CaptureManager {
 
         guard let thumbFrame = thumbFrame else {
             store.captureState = .completed
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
+            Clipboard.copy(text: url.lastPathComponent)
             return
         }
 
         let nsThumbImage = NSImage(cgImage: thumbFrame, size: NSSize(width: thumbFrame.width, height: thumbFrame.height))
 
         if prefs.autoCopyToClipboard {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url.lastPathComponent, forType: .string)
+            Clipboard.copy(text: url.lastPathComponent)
         }
 
         if prefs.automaticSave {
@@ -308,8 +303,7 @@ final class CaptureManager {
     private func showVideoTrimmer(_ url: URL) {
         let trimmer = VideoTrimmerWindow(videoURL: url) { outputURL in
             let finalURL = outputURL ?? url
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(finalURL.lastPathComponent, forType: .string)
+            Clipboard.copy(text: finalURL.lastPathComponent)
         }
         trimmer.show()
     }
@@ -337,8 +331,7 @@ final class CaptureManager {
             self?.thumbnailWindow = nil
         }
         thumbnail.onCopy = { img in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([img])
+            Clipboard.copy(image: img)
         }
         thumbnail.onReveal = { [weak self] img in
             guard let self = self else { return }
@@ -383,8 +376,7 @@ final class CaptureManager {
         case .jpeg: saveJPEG(image, to: url, quality: prefs.jpegQuality)
         }
         if prefs.autoCopyToClipboard {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([image])
+            Clipboard.copy(image: image)
         }
         lastSavedURL = url
         if addToHistory {
@@ -475,8 +467,7 @@ final class CaptureManager {
                                          icon: "text.slash",
                                          iconColor: .secondary)
                     } else {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(text, forType: .string)
+                        Clipboard.copy(text: text)
                         let lines = text.components(separatedBy: "\n").count
                         ToastWindow.show("Copied \(lines) line\(lines == 1 ? "" : "s")",
                                          icon: "doc.on.clipboard.fill",
