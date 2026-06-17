@@ -426,14 +426,12 @@ struct HistoryBrowserView: View {
 
     private func copyImage(_ record: CaptureRecord) {
         guard let image = NSImage(contentsOfFile: record.filePath) else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([image])
+        Clipboard.copy(image: image)
     }
 
     private func copyOCR(_ record: CaptureRecord) {
         guard let text = record.ocrText else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        Clipboard.copy(text: text)
     }
 
     private func deleteRecord(_ record: CaptureRecord) {
