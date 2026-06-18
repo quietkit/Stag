@@ -2117,16 +2117,16 @@ struct EditorView: View {
                     self.ocrAlertMessage = "OCR failed: \(error.localizedDescription)"
                     return
                 }
-                let texts = (request.results as? [VNRecognizedTextObservation])?.compactMap { obs in
+                let lines = (request.results as? [VNRecognizedTextObservation])?.compactMap { obs in
                     obs.topCandidates(1).first?.string
                 } ?? []
-                let result = texts.joined(separator: "\n")
-                guard !result.isEmpty else {
+                switch TextRecognition.ocrOutcome(from: lines) {
+                case .noText:
                     self.ocrAlertMessage = "No text found in image."
-                    return
+                case .copied(let text, let lineCount):
+                    Clipboard.copy(text: text)
+                    self.ocrAlertMessage = "Copied \(lineCount) line(s) to clipboard."
                 }
-                Clipboard.copy(text: result)
-                self.ocrAlertMessage = "Copied \(texts.count) line(s) to clipboard."
             }
         }
         request.recognitionLevel = .accurate
@@ -2147,24 +2147,24 @@ struct EditorView: View {
                 }
                 let payloads = (req.results as? [VNBarcodeObservation])?
                     .compactMap { $0.payloadStringValue } ?? []
-                guard !payloads.isEmpty else {
+                switch TextRecognition.barcodeOutcome(from: payloads) {
+                case .none:
                     self.ocrAlertMessage = "No QR code or barcode found."
-                    return
-                }
-                let combined = payloads.joined(separator: "\n")
-                Clipboard.copy(text: combined)
-                // If it looks like a URL, offer to open it
-                if let first = payloads.first, let url = URL(string: first), url.scheme != nil {
-                    let alert = NSAlert()
-                    alert.messageText = "QR Code Found"
-                    alert.informativeText = first
-                    alert.addButton(withTitle: "Open URL")
-                    alert.addButton(withTitle: "Copied — Done")
-                    if alert.runModal() == .alertFirstButtonReturn {
-                        NSWorkspace.shared.open(url)
+                case .found(let text, let count, let url, let firstPayload):
+                    Clipboard.copy(text: text)
+                    // If it looks like a URL, offer to open it
+                    if let url = url {
+                        let alert = NSAlert()
+                        alert.messageText = "QR Code Found"
+                        alert.informativeText = firstPayload
+                        alert.addButton(withTitle: "Open URL")
+                        alert.addButton(withTitle: "Copied — Done")
+                        if alert.runModal() == .alertFirstButtonReturn {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } else {
+                        self.ocrAlertMessage = "Copied \(count) code(s) to clipboard."
                     }
-                } else {
-                    self.ocrAlertMessage = "Copied \(payloads.count) code(s) to clipboard."
                 }
             }
         }

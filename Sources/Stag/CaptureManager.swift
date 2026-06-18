@@ -458,18 +458,17 @@ final class CaptureManager {
             let request = VNRecognizeTextRequest { request, _ in
                 defer { continuation.resume() }
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let text = observations
-                    .compactMap { $0.topCandidates(1).first?.string }
-                    .joined(separator: "\n")
+                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+                let outcome = TextRecognition.ocrOutcome(from: lines)
                 DispatchQueue.main.async {
-                    if text.isEmpty {
+                    switch outcome {
+                    case .noText:
                         ToastWindow.show("No text found",
                                          icon: "text.slash",
                                          iconColor: .secondary)
-                    } else {
+                    case .copied(let text, let lineCount):
                         Clipboard.copy(text: text)
-                        let lines = text.components(separatedBy: "\n").count
-                        ToastWindow.show("Copied \(lines) line\(lines == 1 ? "" : "s")",
+                        ToastWindow.show("Copied \(lineCount) line\(lineCount == 1 ? "" : "s")",
                                          icon: "doc.on.clipboard.fill",
                                          iconColor: .green)
                     }
