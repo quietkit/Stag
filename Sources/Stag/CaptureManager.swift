@@ -401,11 +401,8 @@ final class CaptureManager {
     }
 
     private func saveJPEGThumbnail(_ image: NSImage, to url: URL) {
-        let maxDim: CGFloat = 320
-        let w = image.size.width, h = image.size.height
-        guard w > 0, h > 0 else { return }
-        let scale = min(maxDim / w, maxDim / h, 1.0)
-        let thumbSize = CGSize(width: w * scale, height: h * scale)
+        let thumbSize = ThumbnailGeometry.fittedSize(for: image.size, maxDimension: 320)
+        guard thumbSize.width > 0 else { return }
         let thumb = NSImage(size: thumbSize)
         thumb.lockFocus()
         image.draw(in: NSRect(origin: .zero, size: thumbSize),
