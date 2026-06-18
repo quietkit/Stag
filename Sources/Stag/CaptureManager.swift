@@ -393,10 +393,7 @@ final class CaptureManager {
     }
 
     private func saveJPEG(_ image: NSImage, to url: URL, quality: Double) {
-        guard let tiff = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff) else { return }
-        let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: quality]
-        guard let data = bitmap.representation(using: .jpeg, properties: props) else { return }
+        guard let data = image.encoded(as: .jpeg(quality: quality)) else { return }
         try? data.write(to: url)
     }
 

@@ -140,20 +140,14 @@ final class CaptureHistoryStore: ObservableObject {
     }
 
     static func writeThumbnail(_ image: NSImage, to url: URL) {
-        let maxDim: CGFloat = 320
-        let w = image.size.width, h = image.size.height
-        guard w > 0, h > 0 else { return }
-        let scale = min(maxDim / w, maxDim / h, 1.0)
-        let thumbSize = CGSize(width: w * scale, height: h * scale)
+        let thumbSize = ThumbnailGeometry.fittedSize(for: image.size, maxDimension: 320)
+        guard thumbSize.width > 0 else { return }
         let thumb = NSImage(size: thumbSize)
         thumb.lockFocus()
         image.draw(in: NSRect(origin: .zero, size: thumbSize),
                    from: NSRect(origin: .zero, size: image.size), operation: .copy, fraction: 1)
         thumb.unlockFocus()
-        let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: 0.7]
-        guard let tiff = thumb.tiffRepresentation,
-              let bm = NSBitmapImageRep(data: tiff),
-              let data = bm.representation(using: .jpeg, properties: props) else { return }
+        guard let data = thumb.encoded(as: .jpeg(quality: 0.7)) else { return }
         try? data.write(to: url)
     }
 
