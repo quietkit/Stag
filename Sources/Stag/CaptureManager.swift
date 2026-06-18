@@ -363,13 +363,16 @@ final class CaptureManager {
         let prefs = store.preferences
         let saveDir = URL(fileURLWithPath: prefs.expandedSavePath)
         try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
-        let ext = prefs.defaultFormat == .jpeg ? "jpg" : "png"
-        let prefix = prefs.filePrefix.isEmpty ? "Stag_" : prefs.filePrefix
         // Smart filename: insert the source app (e.g. "Slack") between the prefix
         // and the timestamp when available — falls back to prefix+timestamp.
         let slug = prefs.useSmartFilenames ? CaptureContext.shared.filenameSlug() : ""
-        let middle = slug.isEmpty ? "" : "\(slug) "
-        let url = saveDir.appendingPathComponent("\(prefix)\(middle)\(Date().shotTimestamp).\(ext)")
+        let filename = CaptureFilename.make(
+            prefix: prefs.filePrefix,
+            slug: slug,
+            timestamp: Date().shotTimestamp,
+            ext: prefs.defaultFormat.fileExtension
+        )
+        let url = saveDir.appendingPathComponent(filename)
 
         switch prefs.defaultFormat {
         case .png: image.pngWrite(to: url)
