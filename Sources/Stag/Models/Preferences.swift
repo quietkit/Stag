@@ -5,6 +5,14 @@ import Combine
 
 enum CaptureFormat: String, Codable, CaseIterable {
     case png, jpeg
+
+    /// File extension for saved captures ("png" / "jpg").
+    var fileExtension: String {
+        switch self {
+        case .png:  return "png"
+        case .jpeg: return "jpg"
+        }
+    }
 }
 
 enum AfterCaptureAction: String, Codable, CaseIterable {
