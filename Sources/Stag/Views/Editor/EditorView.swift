@@ -1871,17 +1871,7 @@ struct EditorView: View {
     @discardableResult
     private static func writeImageSync(_ image: NSImage, to path: String) -> Bool {
         let url = URL(fileURLWithPath: path)
-        let lower = path.lowercased()
-        let data: Data?
-        if lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg") {
-            let props: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: 0.9]
-            data = image.tiffRepresentation
-                .flatMap { NSBitmapImageRep(data: $0) }
-                .flatMap { $0.representation(using: .jpeg, properties: props) }
-        } else {
-            data = image.pngData
-        }
-        guard let data else { return false }
+        guard let data = image.encoded(as: .forPath(path)) else { return false }
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
