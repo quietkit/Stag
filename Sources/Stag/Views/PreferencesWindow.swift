@@ -599,9 +599,13 @@ private struct PreferencesView: View {
     // MARK: Helpers
 
     private var filenamePreview: String {
-        let prefix = prefs.filePrefix.isEmpty ? "Stag_" : prefs.filePrefix
-        let mid = prefs.useSmartFilenames ? "Safari " : ""
-        return "\(prefix)\(mid)2026-01-01.png"
+        let slug = prefs.useSmartFilenames ? "Safari" : ""
+        return CaptureFilename.make(
+            prefix: prefs.filePrefix,
+            slug: slug,
+            timestamp: "2026-01-01",
+            ext: prefs.defaultFormat.fileExtension
+        )
     }
 
     private func actionDisplayName(_ action: AfterCaptureAction) -> String {
