@@ -860,9 +860,9 @@ private final class ShortcutCapture {
         capture.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             if event.type == .flagsChanged { return nil }       // ignore bare modifier presses
             if event.keyCode == 53 { capture.finish(nil); return nil }   // Esc cancels
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard !mods.isEmpty else { return nil }              // require ≥1 modifier; swallow bare keys
-            capture.finish(HotKeyCombination(keyCode: event.keyCode, modifiers: mods.rawValue))
+            guard let combo = HotKeyCaptureRule.combination(keyCode: event.keyCode,
+                                                            modifiers: event.modifierFlags) else { return nil }
+            capture.finish(combo)
             return nil
         }
     }
@@ -1023,14 +1023,8 @@ private final class EditorKeyCapture {
         active = capture
         capture.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             if event.keyCode == 53 { capture.finish(nil); return nil }  // Esc → cancel
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard let char = event.charactersIgnoringModifiers?.lowercased(), !char.isEmpty else {
-                return nil
-            }
-            // Only accept alphanumeric, digits, and a few symbols; reject modifiers-only
-            let validChars = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-=[];',./\\`"))
-            guard char.unicodeScalars.allSatisfy({ validChars.contains($0) }) else { return nil }
-            let key = mods == .shift ? "⇧\(char)" : char
+            guard let raw = event.charactersIgnoringModifiers,
+                  let key = EditorToolKey.binding(char: raw, modifiers: event.modifierFlags) else { return nil }
             capture.finish(key)
             return nil
         }
